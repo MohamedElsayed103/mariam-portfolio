@@ -1,0 +1,718 @@
+---
+import { nextState, person } from '../data/cv';
+
+const [user, host] = person.email.split('@');
+const parts = [user, `@${host}`];
+
+const trim = (url: string) => url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+
+const links = [
+  { label: 'LinkedIn', sub: trim(person.linkedin), href: person.linkedin, kind: 'out' },
+  { label: 'GitHub', sub: trim(person.github), href: person.github, kind: 'out' },
+  { label: 'Download CV', sub: person.cv.replace(/^\//, ''), href: person.cv, kind: 'down' },
+];
+
+const diagramLabel = `State machine. Current state ${nextState.state}. The event ${nextState.transition} moves it to: ${nextState.label}.`;
+---
+
+<footer id="contact" data-theme="dark" class="contact" data-contact>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <p class="status"><span class="lamp" data-contact-lamp></span>{person.status}</p>
+        <h2 class="title" data-contact-title>One event away.</h2>
+      </div>
+      <p class="lede">
+        The state machine you scrolled past is waiting on a single event, and it is yours to send. Tell me about the
+        role and the team.
+      </p>
+    </div>
+
+    <div class="machine" role="img" aria-label={diagramLabel} data-contact-machine>
+      <span class="state state-now"><span class="lamp"></span><span class="code">{nextState.state}</span></span>
+      <span class="edge">
+        <span class="code event">{nextState.transition}</span>
+        <span class="wire"><span class="wire-fill"></span></span>
+      </span>
+      <span class="state state-next">{nextState.label}</span>
+    </div>
+
+    <div class="mail">
+      <a class="email" href={`mailto:${person.email}`} data-contact-email>
+        <span class="sr-only">Email {person.email}</span>
+        <span class="email-text" aria-hidden="true">
+          {
+            parts.map((part) => (
+              <span class="part">
+                {[...part].map((ch) => (
+                  <span class="ch">{ch}</span>
+                ))}
+              </span>
+            ))
+          }
+        </span>
+      </a>
+      <div class="mail-actions">
+        <button class="btn btn-signal copy" type="button" data-contact-copy data-email={person.email}>
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path class="i-copy" d="M5.5 5.5V3a1 1 0 0 1 1-1H13a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-2.5M3 5.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z" />
+            <path class="i-done" d="m3 8.5 3.2 3.2L13 4.8" />
+          </svg>
+          <span data-contact-copy-label>Copy address</span>
+        </button>
+        <a class="btn btn-ghost" href={`mailto:${person.email}`}>Write an email</a>
+      </div>
+    </div>
+
+    <ul class="links">
+      {
+        links.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class:list={['link', `link-${link.kind}`]}
+              {...(link.kind === 'out' ? { target: '_blank', rel: 'noopener' } : { download: true })}
+            >
+              <span class="link-label">{link.label}</span>
+              <span class="link-sub">{link.sub}</span>
+              <span class="arrow" aria-hidden="true">
+                {[0, 1].map(() => (
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    {link.kind === 'out' ? <path d="M6 18 18 6M8 6h10v10" /> : <path d="M12 4v15M5.5 12.5 12 19l6.5-6.5" />}
+                  </svg>
+                ))}
+              </span>
+              {link.kind === 'out' && <span class="sr-only">(opens in a new tab)</span>}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="base">
+      <p class="legal">
+        <span>© 2026 {person.name}</span>
+        <span>{person.location}</span>
+      </p>
+      <p class="health">
+        <span class="code">GET /actuator/health</span>
+        <span class="code health-body"><span class="lamp"></span>{'{"status":"UP"}'}</span>
+      </p>
+      <a class="top" href="#top">
+        Back to top
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" /></svg>
+      </a>
+    </div>
+  </div>
+
+  <p class="toast" role="status" aria-live="polite" data-contact-toast></p>
+</footer>
+
+<style>
+  .contact {
+    padding-block: var(--section) 0;
+    overflow: clip;
+  }
+
+  /* ---------- Heading ---------- */
+  .head {
+    display: grid;
+    gap: 1.5rem 4rem;
+    align-items: end;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 0.65em;
+    margin-bottom: 1.1rem;
+    font-weight: 550;
+    color: var(--fg-muted);
+  }
+
+  .title {
+    font-size: var(--text-2xl);
+    font-weight: 800;
+    font-stretch: 118%;
+  }
+
+  @media (min-width: 60em) {
+    .head {
+      grid-template-columns: 1fr minmax(0, 26rem);
+    }
+  }
+
+  /* ---------- The pending transition ---------- */
+  .machine {
+    --wire: color-mix(in oklch, var(--fg-muted) 60%, var(--bg));
+    display: flex;
+    align-items: center;
+    margin-top: clamp(3rem, 2rem + 4vw, 5.5rem);
+  }
+
+  .state {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: var(--r-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .state .code,
+  .event {
+    font-size: 0.8125rem;
+  }
+
+  .state-now {
+    background: var(--indigo-800);
+    color: var(--fg);
+  }
+
+  .state-next {
+    color: var(--fg-muted);
+    box-shadow: inset 0 0 0 1.5px var(--rule);
+    transition:
+      color var(--dur-2) var(--ease-out),
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out);
+    transition-delay: 0s;
+  }
+
+  .edge {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+  }
+
+  .event {
+    position: absolute;
+    left: 1rem;
+    bottom: calc(50% + 0.45rem);
+    color: var(--signal);
+    line-height: 1;
+  }
+
+  /* Dashed while pending; the lime trace runs when the email link is hovered or focused. */
+  .wire {
+    position: relative;
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(to right, var(--wire) 60%, transparent 0) 0 0 / 10px 2px repeat-x;
+  }
+
+  .wire::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    margin-top: -4.5px;
+    border-top: 2px solid var(--wire);
+    border-right: 2px solid var(--wire);
+    transform: rotate(45deg);
+    transition: border-color var(--dur-2) var(--ease-out);
+  }
+
+  .wire-fill {
+    position: absolute;
+    inset: 0;
+    background: var(--signal);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform 520ms var(--ease-in-out);
+  }
+
+  .contact:has(.email:hover, .email:focus-visible) .wire-fill {
+    transform: scaleX(1);
+    transition: transform 900ms var(--ease-out);
+  }
+
+  .contact:has(.email:hover, .email:focus-visible) .wire::after {
+    border-color: var(--signal);
+    transition-delay: 380ms;
+  }
+
+  .contact:has(.email:hover, .email:focus-visible) .state-next {
+    background: var(--signal);
+    color: var(--indigo-950);
+    box-shadow: inset 0 0 0 1.5px var(--signal);
+    transition-delay: 420ms;
+  }
+
+  .state-now .lamp.is-live {
+    animation: lamp-wait 2.4s var(--ease-in-out) infinite;
+  }
+
+  @keyframes lamp-wait {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in oklch, var(--signal) 55%, transparent);
+    }
+    60% {
+      box-shadow: 0 0 0 0.45rem color-mix(in oklch, var(--signal) 0%, transparent);
+    }
+  }
+
+  @media (max-width: 34em) {
+    .machine {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .edge {
+      flex: none;
+      align-self: flex-start;
+      height: 3.5rem;
+      margin-left: 1.25rem;
+    }
+
+    .event {
+      position: static;
+      order: 2;
+      margin-left: 1rem;
+    }
+
+    .wire {
+      flex: none;
+      width: 2px;
+      height: 100%;
+      background: linear-gradient(to bottom, var(--wire) 60%, transparent 0) 0 0 / 2px 10px repeat-y;
+    }
+
+    .wire::after {
+      right: auto;
+      left: 50%;
+      top: auto;
+      bottom: -1px;
+      margin: 0 0 0 -4.5px;
+      transform: rotate(135deg);
+    }
+
+    .wire-fill {
+      transform: scaleY(0);
+      transform-origin: 50% 0;
+    }
+
+    .contact:has(.email:hover, .email:focus-visible) .wire-fill {
+      transform: scaleY(1);
+    }
+  }
+
+  /* ---------- Email ---------- */
+  .mail {
+    container-type: inline-size;
+    margin-top: clamp(1.75rem, 1rem + 2.5vw, 3rem);
+  }
+
+  .email {
+    position: relative;
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    padding-bottom: 0.14em;
+    font-size: clamp(1.5rem, 9.1cqi, 3.5rem);
+    font-weight: 750;
+    font-stretch: 112%;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    text-decoration: none;
+    color: var(--fg);
+  }
+
+  .part {
+    display: block;
+    overflow: clip;
+    padding-block: 0.06em 0.16em;
+    margin-bottom: -0.16em;
+    white-space: nowrap;
+  }
+
+  .ch {
+    display: inline-block;
+  }
+
+  .email::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: max(3px, 0.05em);
+    background: var(--signal);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform 520ms var(--ease-in-out);
+  }
+
+  .email:hover::after,
+  .email:focus-visible::after {
+    transform: scaleX(1);
+    transition: transform 900ms var(--ease-out);
+  }
+
+  @container (min-width: 44em) {
+    .email {
+      font-size: min(5.65cqi, 5.5rem);
+      white-space: nowrap;
+    }
+
+    .part {
+      display: inline-block;
+      vertical-align: top;
+    }
+  }
+
+  .mail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: clamp(1.5rem, 1rem + 1.5vw, 2.25rem);
+  }
+
+  .copy svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .copy .i-done {
+    display: none;
+    stroke-width: 2;
+  }
+
+  .copy.is-done .i-copy {
+    display: none;
+  }
+
+  .copy.is-done .i-done {
+    display: inline;
+  }
+
+  /* ---------- Elsewhere ---------- */
+  .links {
+    display: grid;
+    margin-top: clamp(3.5rem, 2rem + 6vw, 7rem);
+  }
+
+  .link {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0.2rem 1rem;
+    padding-block: 1.35rem;
+    border-top: 1px solid var(--rule);
+    text-decoration: none;
+  }
+
+  .link::before {
+    content: '';
+    position: absolute;
+    inset: -1px 0 auto 0;
+    height: 2px;
+    background: var(--signal);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform var(--dur-3) var(--ease-out);
+  }
+
+  .link:hover::before,
+  .link:focus-visible::before {
+    transform: scaleX(1);
+  }
+
+  .link-label {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    font-stretch: 112%;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+  }
+
+  .link-sub {
+    grid-column: 1;
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .arrow {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    position: relative;
+    width: 1.75rem;
+    height: 1.75rem;
+    overflow: hidden;
+    color: var(--fg-muted);
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .arrow svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 560ms var(--ease-out);
+  }
+
+  .link-out .arrow svg:last-child {
+    transform: translate(-110%, 110%);
+  }
+
+  .link-down .arrow svg:last-child {
+    transform: translateY(-110%);
+  }
+
+  .link:hover .arrow,
+  .link:focus-visible .arrow {
+    color: var(--signal);
+  }
+
+  .link-out:hover .arrow svg:first-child,
+  .link-out:focus-visible .arrow svg:first-child {
+    transform: translate(110%, -110%);
+  }
+
+  .link-down:hover .arrow svg:first-child,
+  .link-down:focus-visible .arrow svg:first-child {
+    transform: translateY(110%);
+  }
+
+  .link:hover .arrow svg:last-child,
+  .link:focus-visible .arrow svg:last-child {
+    transform: none;
+  }
+
+  @media (min-width: 52em) {
+    .links {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0 clamp(1.5rem, 3vw, 3rem);
+    }
+
+    .link {
+      align-items: start;
+      padding-block: 1.5rem 0;
+    }
+  }
+
+  /* ---------- Closing row ---------- */
+  .base {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem 2rem;
+    margin-top: clamp(3.5rem, 2rem + 6vw, 7rem);
+    padding-block: 1rem max(1.25rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--rule);
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+  }
+
+  .legal,
+  .health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.15rem 1.25rem;
+  }
+
+  .health .code {
+    font-size: 0.8125rem;
+  }
+
+  .health-body {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55em;
+    color: var(--fg);
+  }
+
+  @media (max-width: 61.99em) {
+    .legal {
+      flex: 1;
+    }
+
+    .health {
+      order: 3;
+      flex-basis: 100%;
+      padding-bottom: 0.5rem;
+    }
+  }
+
+  .top {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    min-height: 2.75rem;
+    font-weight: 600;
+    color: var(--fg);
+    text-decoration: none;
+  }
+
+  .top svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  .top:hover svg {
+    transform: translateY(-3px);
+  }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
+    z-index: var(--z-toast);
+    max-width: calc(100vw - 2rem);
+    padding: 0.8em 1.2em;
+    border-radius: var(--r-pill);
+    background: var(--on-dark);
+    color: var(--indigo-950);
+    font-size: var(--text-sm);
+    font-weight: 650;
+    line-height: 1.2;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 1rem);
+    transition:
+      opacity var(--dur-2) var(--ease-out),
+      transform var(--dur-3) var(--ease-out);
+  }
+
+  .toast.is-on {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+</style>
+
+<script>
+  import { gsap, EASE, reduced, whenVisible, splitWords } from '../scripts/motion';
+
+  function initContact() {
+    const root = document.querySelector<HTMLElement>('[data-contact]');
+    if (!root) return;
+
+    // Copy the address, confirm in the live region.
+    const copy = root.querySelector<HTMLButtonElement>('[data-contact-copy]');
+    const copyLabel = root.querySelector<HTMLElement>('[data-contact-copy-label]');
+    const toast = root.querySelector<HTMLElement>('[data-contact-toast]');
+    let timer = 0;
+
+    const announce = (message: string, ok: boolean) => {
+      if (!toast || !copy || !copyLabel) return;
+      toast.textContent = message;
+      toast.classList.add('is-on');
+      copy.classList.toggle('is-done', ok);
+      if (ok) copyLabel.textContent = 'Copied';
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        toast.classList.remove('is-on');
+        copy.classList.remove('is-done');
+        copyLabel.textContent = 'Copy address';
+      }, 2600);
+    };
+
+    copy?.addEventListener('click', async () => {
+      const email = copy.dataset.email ?? '';
+      try {
+        await navigator.clipboard.writeText(email);
+        announce('Email address copied', true);
+      } catch {
+        const field = document.createElement('textarea');
+        field.value = email;
+        field.setAttribute('readonly', '');
+        field.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(field);
+        field.select();
+        let ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch {
+          ok = false;
+        }
+        field.remove();
+        copy.focus();
+        announce(ok ? 'Email address copied' : `Could not copy. The address is ${email}`, ok);
+      }
+    });
+
+    // The waiting lamp only pulses while it is on screen and the tab is visible.
+    const lamp = root.querySelector<HTMLElement>('.state-now .lamp');
+    const machine = root.querySelector<HTMLElement>('[data-contact-machine]');
+    if (lamp && machine && !reduced) {
+      let seen = false;
+      const sync = () => lamp.classList.toggle('is-live', seen && !document.hidden);
+      new IntersectionObserver(([entry]) => {
+        seen = entry.isIntersecting;
+        sync();
+      }).observe(machine);
+      document.addEventListener('visibilitychange', sync);
+    }
+
+    if (reduced) return;
+
+    const title = root.querySelector<HTMLElement>('[data-contact-title]');
+    if (title) {
+      whenVisible(title, () => {
+        const words = splitWords(title);
+        gsap.from(words, { yPercent: 110, duration: 1.1, stagger: 0.08, ease: EASE.out });
+      });
+    }
+
+    // The address is keyed in, one character at a time, then the pending wire is drawn towards it.
+    const email = root.querySelector<HTMLElement>('[data-contact-email]');
+    if (email) {
+      whenVisible(
+        email,
+        () => {
+          gsap.from(email.querySelectorAll('.ch'), {
+            yPercent: 115,
+            duration: 1,
+            ease: EASE.out,
+            stagger: { each: 0.022 },
+            clearProps: 'transform',
+          });
+        },
+        'top 88%',
+      );
+    }
+
+    if (machine) {
+      whenVisible(
+        machine,
+        () => {
+          const tl = gsap.timeline({ defaults: { ease: EASE.out } });
+          tl.from(machine.querySelector('.state-now'), { opacity: 0, x: -16, duration: 0.7 })
+            .from(machine.querySelector('.edge'), { clipPath: 'inset(0 100% 0 0)', duration: 1.1, ease: EASE.inOut, clearProps: 'clipPath' }, 0.1)
+            .from(machine.querySelector('.state-next'), { opacity: 0, duration: 0.6, clearProps: 'opacity' }, 0.9);
+        },
+        'top 88%',
+      );
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initContact);
+  else initContact();
+</script>

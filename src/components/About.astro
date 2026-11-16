@@ -1,0 +1,165 @@
+---
+import { person } from '../data/cv';
+---
+
+<section id="about" data-theme="light" class="about section-pad">
+  <div class="wrap about-grid">
+    <h2 class="about-title">About</h2>
+
+    <p class="about-statement" data-about-statement>{person.statement}</p>
+
+    <dl class="about-facts">
+      {
+        person.facts.map((fact) => (
+          <div class="fact">
+            <dt>{fact.label}</dt>
+            <dd>{fact.value}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>
+
+<style>
+  .about-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: clamp(1.75rem, 1rem + 3vw, 3rem);
+  }
+
+  .about-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--accent);
+  }
+
+  .about-statement {
+    /* Unfilled words: a pale violet that still reads, then full ink. */
+    --pale: color-mix(in oklch, var(--violet-400) 55%, var(--violet-200));
+    font-size: clamp(1.7rem, 1.1rem + 2.75vw, 3.4rem);
+    font-weight: 620;
+    font-stretch: 104%;
+    line-height: 1.14;
+    letter-spacing: -0.02em;
+    max-width: 27ch;
+    text-wrap: pretty;
+    color: var(--fg);
+  }
+
+  /* Words are wrapped by the script. Without it, the text is plain ink. */
+  .about-statement :global(.w) {
+    color: color-mix(in oklch, var(--fg) calc(var(--fill, 1) * 100%), var(--pale));
+  }
+
+  .about-facts {
+    margin-top: clamp(1rem, 0.5rem + 2vw, 2rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .fact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.3rem;
+    padding-block: 1.05rem 1.15rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  .fact dt {
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    color: var(--fg-muted);
+  }
+
+  .fact dd {
+    font-size: var(--text-base);
+    font-weight: 550;
+    line-height: 1.4;
+    text-wrap: pretty;
+  }
+
+  /* Tablet: label and value share a row, aligned on one axis. */
+  @media (min-width: 40rem) {
+    .fact {
+      grid-template-columns: 11rem minmax(0, 1fr);
+      gap: 1.5rem;
+      align-items: baseline;
+    }
+  }
+
+  /* Desktop: facts hold the left margin while the statement scrolls past. */
+  @media (min-width: 64rem) {
+    .about-grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-template-rows: auto 1fr;
+      column-gap: var(--gutter);
+      row-gap: clamp(2.5rem, 1rem + 3vw, 4rem);
+    }
+
+    .about-title {
+      grid-column: 1 / span 4;
+      grid-row: 1;
+      /* Sit on the first baseline of the statement. */
+      align-self: start;
+      padding-top: 0.55em;
+    }
+
+    .about-statement {
+      grid-column: 6 / -1;
+      grid-row: 1 / span 2;
+    }
+
+    .about-facts {
+      grid-column: 1 / span 4;
+      grid-row: 2;
+      align-self: start;
+      position: sticky;
+      top: calc(var(--nav-h) + 2rem);
+      margin-top: 0;
+    }
+
+    .fact {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.3rem;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, reduced } from '../scripts/motion';
+
+  const statement = document.querySelector<HTMLElement>('[data-about-statement]');
+
+  if (statement && !reduced) {
+    // Word spans keep their text, so the paragraph reads the same to assistive tech.
+    const text = statement.textContent?.trim() ?? '';
+    const parts = text.split(/\s+/);
+    statement.textContent = '';
+    const words = parts.map((word, i) => {
+      const span = document.createElement('span');
+      span.className = 'w';
+      span.textContent = word;
+      statement.appendChild(span);
+      if (i < parts.length - 1) statement.appendChild(document.createTextNode(' '));
+      return span;
+    });
+
+    gsap.fromTo(
+      words,
+      { '--fill': 0 },
+      {
+        '--fill': 1,
+        ease: 'none',
+        duration: 1,
+        stagger: 0.28,
+        scrollTrigger: {
+          trigger: statement,
+          start: 'top 82%',
+          end: 'bottom 52%',
+          scrub: 0.5,
+        },
+      },
+    );
+  }
+</script>

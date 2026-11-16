@@ -1,0 +1,343 @@
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource-variable/jetbrains-mono/wght.css';
+
+/* ---------- Tokens ---------- */
+:root {
+  /* Indigo: the room. Violet: the brand. Lime: a healthy signal. Coral: a message in flight. */
+  --indigo-950: oklch(0.16 0.07 280);
+  --indigo-900: oklch(0.21 0.1 280);
+  --indigo-800: oklch(0.28 0.13 280);
+  --indigo-700: oklch(0.35 0.16 280);
+  --violet-600: oklch(0.45 0.2 280);
+  --violet-500: oklch(0.55 0.21 282);
+  --violet-400: oklch(0.67 0.17 284);
+  --violet-300: oklch(0.79 0.11 285);
+  --violet-200: oklch(0.89 0.06 285);
+  --violet-100: oklch(0.95 0.025 285);
+  --signal: oklch(0.89 0.2 128);
+  --signal-deep: oklch(0.45 0.13 138);
+  --flare: oklch(0.72 0.17 30);
+
+  --white: oklch(1 0 0);
+  --surface: oklch(0.967 0.008 280);
+  --line: oklch(0.9 0.014 280);
+  --ink: oklch(0.2 0.045 280);
+  --muted: oklch(0.45 0.035 280);
+
+  --on-dark: oklch(0.97 0.012 285);
+  --on-dark-muted: oklch(0.8 0.045 284);
+  --line-dark: oklch(0.34 0.09 280);
+
+  /* Semantic, flipped by [data-theme] */
+  --bg: var(--white);
+  --fg: var(--ink);
+  --fg-muted: var(--muted);
+  --rule: var(--line);
+  --accent: var(--violet-600);
+  --lamp: var(--signal-deep);
+
+  /* Type */
+  --font-sans: 'Archivo Variable', 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
+  --text-lg: clamp(1.2rem, 1.1rem + 0.5vw, 1.5rem);
+  --text-xl: clamp(1.5rem, 1.25rem + 1.2vw, 2.25rem);
+  --text-2xl: clamp(2rem, 1.4rem + 2.8vw, 3.75rem);
+  --text-3xl: clamp(2.6rem, 1.4rem + 5.6vw, 5.75rem);
+
+  /* Space */
+  --gutter: clamp(1.25rem, 0.6rem + 3vw, 3.5rem);
+  --section: clamp(5rem, 3rem + 9vw, 11rem);
+  --wrap: 82rem;
+
+  /* Shape */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* expo */
+  --ease-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 160ms;
+  --dur-2: 320ms;
+  --dur-3: 640ms;
+
+  /* Layers */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-nav: 40;
+  --z-overlay: 60;
+  --z-toast: 80;
+
+  --nav-h: 4.25rem;
+}
+
+[data-theme='dark'] {
+  --bg: var(--indigo-950);
+  --fg: var(--on-dark);
+  --fg-muted: var(--on-dark-muted);
+  --rule: var(--line-dark);
+  --accent: var(--violet-300);
+  --lamp: var(--signal);
+  color-scheme: dark;
+}
+
+[data-theme='violet'] {
+  --bg: var(--violet-600);
+  --fg: var(--white);
+  --fg-muted: oklch(0.92 0.04 285);
+  --rule: oklch(0.58 0.17 282);
+  --accent: var(--white);
+  --lamp: var(--signal);
+  color-scheme: dark;
+}
+
+/* ---------- Reset ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: var(--nav-h);
+  background: var(--indigo-950);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  line-height: 1.02;
+  font-weight: 750;
+  font-stretch: 112%;
+  letter-spacing: -0.02em;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.2em;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--indigo-950);
+}
+
+/* ---------- Shared primitives ---------- */
+section[data-theme],
+footer[data-theme] {
+  background: var(--bg);
+  color: var(--fg);
+  position: relative;
+}
+
+.wrap {
+  width: min(100% - 2 * var(--gutter), var(--wrap));
+  margin-inline: auto;
+}
+
+.section-pad {
+  padding-block: var(--section);
+}
+
+/* Section headings are plain, large, sentence-case. No eyebrows, no numbering. */
+.h-section {
+  font-size: var(--text-2xl);
+  max-width: 18ch;
+}
+
+.lede {
+  font-size: var(--text-lg);
+  line-height: 1.45;
+  color: var(--fg-muted);
+  max-width: 46ch;
+}
+
+/* Mono is reserved for things that ARE code: state names, queue names, events, endpoints. */
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  min-height: 3rem;
+  padding: 0.7em 1.35em;
+  border-radius: var(--r-pill);
+  font-weight: 650;
+  font-size: var(--text-base);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-signal {
+  background: var(--signal);
+  color: var(--indigo-950);
+}
+
+.btn-signal:hover {
+  background: oklch(0.93 0.2 128);
+}
+
+.btn-primary {
+  background: var(--violet-600);
+  color: var(--white);
+}
+
+.btn-primary:hover {
+  background: var(--indigo-700);
+}
+
+.btn-ghost {
+  box-shadow: inset 0 0 0 1.5px var(--rule);
+  color: var(--fg);
+}
+
+.btn-ghost:hover {
+  box-shadow: inset 0 0 0 1.5px var(--fg);
+}
+
+.lamp {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--lamp);
+  flex: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: var(--z-toast);
+  padding: 0.7em 1em;
+  background: var(--signal);
+  color: var(--indigo-950);
+  font-weight: 650;
+  border-radius: var(--r-sm);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

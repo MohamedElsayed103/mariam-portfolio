@@ -1,0 +1,1442 @@
+---
+import { projects } from '../data/cv';
+
+const p = projects.hospital;
+const m = p.machine;
+
+/* ---------- State diagram geometry ----------
+   Names, events and transitions come from cv.ts. Only positions live here,
+   keyed by the index of a state in machine.states (0 is the initial state). */
+type Pt = [number, number];
+type Box = { cx: number; cy: number; w: number; h: number };
+type Route = { pts: Pt[]; label: { x: number; y: number; rot?: number; anchor?: 'start' | 'middle' } };
+type Layout = { id: string; vb: Pt; boxes: Box[]; init: Pt[]; routes: Record<string, Route> };
+
+const wide: Layout = {
+  id: 'wide',
+  vb: [880, 420],
+  boxes: [
+    { cx: 130, cy: 210, w: 150, h: 56 },
+    { cx: 460, cy: 210, w: 176, h: 56 },
+    { cx: 775, cy: 90, w: 150, h: 56 },
+    { cx: 775, cy: 330, w: 150, h: 56 },
+  ],
+  init: [[12, 210], [55, 210]],
+  routes: {
+    '0>1': { pts: [[205, 210], [372, 210]], label: { x: 288, y: 197 } },
+    '1>2': { pts: [[460, 182], [460, 90], [700, 90]], label: { x: 584, y: 77 } },
+    '0>2': { pts: [[130, 182], [130, 34], [775, 34], [775, 62]], label: { x: 452, y: 21 } },
+    '1>3': { pts: [[460, 238], [460, 330], [700, 330]], label: { x: 584, y: 352 } },
+    '0>3': { pts: [[130, 238], [130, 386], [775, 386], [775, 358]], label: { x: 452, y: 408 } },
+  },
+};
+
+const tall: Layout = {
+  id: 'tall',
+  vb: [320, 500],
+  boxes: [
+    { cx: 164, cy: 76, w: 160, h: 52 },
+    { cx: 164, cy: 204, w: 160, h: 52 },
+    { cx: 164, cy: 332, w: 160, h: 52 },
+    { cx: 164, cy: 460, w: 160, h: 52 },
+  ],
+  init: [[164, 12], [164, 50]],
+  routes: {
+    '0>1': { pts: [[110, 102], [110, 178]], label: { x: 121, y: 144, anchor: 'start' } },
+    '1>2': { pts: [[110, 230], [110, 306]], label: { x: 121, y: 272, anchor: 'start' } },
+    '0>2': { pts: [[244, 76], [286, 76], [286, 332], [244, 332]], label: { x: 302, y: 204, rot: 90 } },
+    '1>3': { pts: [[84, 204], [56, 204], [56, 450], [84, 450]], label: { x: 43, y: 327, rot: -90 } },
+    '0>3': { pts: [[84, 76], [22, 76], [22, 470], [84, 470]], label: { x: 9, y: 273, rot: -90 } },
+  },
+};
+
+const HEAD = 9; // arrowhead length
+
+function geometry(pts: Pt[], r = 12) {
+  const n = pts.length;
+  const [ex, ey] = pts[n - 1];
+  const [qx, qy] = pts[n - 2];
+  const len = Math.hypot(ex - qx, ey - qy);
+  const ux = (ex - qx) / len;
+  const uy = (ey - qy) / len;
+  // The line stops inside the arrowhead so the stroke never pokes past the tip.
+  const line: Pt[] = [...pts.slice(0, -1), [ex - ux * (HEAD - 2), ey - uy * (HEAD - 2)]];
+  let d = `M${line[0][0]} ${line[0][1]}`;
+  for (let i = 1; i < line.length - 1; i++) {
+    const [px, py] = line[i - 1];
+    const [x, y] = line[i];
+    const [nx, ny] = line[i + 1];
+    const l1 = Math.hypot(x - px, y - py);
+    const l2 = Math.hypot(nx - x, ny - y);
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    d += ` L${x - ((x - px) / l1) * rr} ${y - ((y - py) / l1) * rr} Q${x} ${y} ${x + ((nx - x) / l2) * rr} ${y + ((ny - y) / l2) * rr}`;
+  }
+  const last = line[line.length - 1];
+  d += ` L${last[0]} ${last[1]}`;
+  const deg = (Math.atan2(uy, ux) * 180) / Math.PI;
+  return { d, head: `translate(${ex} ${ey}) rotate(${deg})` };
+}
+
+const headPath = `M0 0 L${-HEAD} ${-HEAD / 2} L${-HEAD} ${HEAD / 2} Z`;
+
+const diagrams = [wide, tall].map((L) => ({
+  ...L,
+  initGeo: geometry(L.init, 0),
+  edges: m.transitions.map((t) => {
+    const route = L.routes[`${m.states.indexOf(t.from)}>${m.states.indexOf(t.to)}`];
+    return { ...t, key: `${t.from}|${t.event}`, geo: geometry(route.pts), label: route.label };
+  }),
+  states: m.states.map((name, i) => ({
+    name,
+    box: L.boxes[i],
+    final: m.final.includes(name),
+    tone: /CANCEL/.test(name) ? 'flare' : 'signal',
+  })),
+}));
+
+const diagramLabel =
+  `State diagram of a patient record. It starts in ${m.initial}. ` +
+  m.transitions.map((t) => `${t.event} moves ${t.from} to ${t.to}.`).join(' ') +
+  ` ${m.final.join(' and ')} are final states.`;
+
+const targetFrom = (state: string, event: string) =>
+  m.transitions.find((t) => t.from === state && t.event === event)?.to ?? null;
+
+/* ---------- Text helpers ---------- */
+const identifiers = [...m.states, ...m.events, ...p.queues.map((q) => q.name)];
+const idRe = new RegExp(`(${identifiers.join('|')})`);
+const annotate = (text: string) => text.split(idRe).map((part) => ({ part, code: identifiers.includes(part) }));
+
+const isMine = (name: string) => p.services.some((s) => s.name === name && 'mine' in s && s.mine);
+---
+
+<section id="project-hospital" data-theme="light" class="ph section-pad">
+  <div class="wrap">
+    <header class="ph-head">
+      <div class="ph-title">
+        <h3 class="ph-name">{p.name}</h3>
+        <p class="ph-meta">{p.year}, {p.kind.toLowerCase()}</p>
+        <p class="ph-summary">{p.summary}</p>
+      </div>
+      <div class="ph-part">
+        <p class="ph-context">{p.context}</p>
+        <p class="ph-mine">{p.myPart}</p>
+        <a class="btn btn-primary ph-link" href={p.link.href} target="_blank" rel="noopener">
+          {p.link.label}
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M3 11 L11 3 M5 3 H11 V9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <span class="sr-only">(opens in a new tab)</span>
+        </a>
+      </div>
+    </header>
+
+    <div class="sm" data-machine-root>
+      <script type="application/json" data-machine set:html={JSON.stringify(m)} />
+
+      <div class="sm-intro">
+        <h4 class="ph-h4">The patient state machine</h4>
+        <p class="sm-lead">
+          This is the configuration inside <span class="code">{p.services.find((s) => s.id === 'workflow')?.name}</span>.
+          Send it an event and see what it accepts.
+        </p>
+      </div>
+
+      <div class="sm-stage">
+        <figure class="sm-figure">
+          {
+            diagrams.map((D) => (
+              <svg
+                class={`sm-svg sm-svg--${D.id}`}
+                viewBox={`0 0 ${D.vb[0]} ${D.vb[1]}`}
+                role="img"
+                aria-label={diagramLabel}
+                data-diagram
+              >
+                <g class="sm-init">
+                  <circle cx={D.init[0][0]} cy={D.init[0][1]} r="6" />
+                  <path class="sm-init-line" d={D.initGeo.d} />
+                  <path class="sm-init-head" d={headPath} transform={D.initGeo.head} />
+                </g>
+                {D.edges.map((e) => (
+                  <g class:list={['sm-edge', { 'is-open': e.from === m.initial }]} data-edge={e.key} data-from={e.from}>
+                    <path class="sm-line" d={e.geo.d} />
+                    <path class="sm-head" d={headPath} transform={e.geo.head} />
+                    <text
+                      class="sm-ev"
+                      x={e.label.x}
+                      y={e.label.y}
+                      text-anchor={e.label.anchor ?? 'middle'}
+                      dominant-baseline={e.label.rot ? 'central' : 'auto'}
+                      transform={e.label.rot ? `rotate(${e.label.rot} ${e.label.x} ${e.label.y})` : undefined}
+                    >
+                      {e.event}
+                    </text>
+                  </g>
+                ))}
+                {D.states.map((s) => (
+                  <g
+                    class:list={['sm-state', { 'is-final': s.final, 'is-active': s.name === m.initial }]}
+                    data-state={s.name}
+                    data-tone={s.tone}
+                  >
+                    <g class="sm-state-in">
+                      <rect class="sm-box" x={s.box.cx - s.box.w / 2} y={s.box.cy - s.box.h / 2} width={s.box.w} height={s.box.h} rx="9" />
+                      {s.final && (
+                        <rect
+                          class="sm-box-inner"
+                          x={s.box.cx - s.box.w / 2 + 4.5}
+                          y={s.box.cy - s.box.h / 2 + 4.5}
+                          width={s.box.w - 9}
+                          height={s.box.h - 9}
+                          rx="5.5"
+                        />
+                      )}
+                      <text class="sm-name" x={s.box.cx} y={s.box.cy} text-anchor="middle" dominant-baseline="central">
+                        {s.name}
+                      </text>
+                    </g>
+                  </g>
+                ))}
+                <circle class="sm-token" r="7" cx="0" cy="0" />
+              </svg>
+            ))
+          }
+          <figcaption class="sm-key">
+            <span class="sm-key-item"><i class="sm-key-dot"></i>initial state</span>
+            <span class="sm-key-item"><i class="sm-key-final"></i>final state</span>
+            <span class="sm-key-item"><i class="sm-key-active"></i>current state</span>
+          </figcaption>
+        </figure>
+
+        <div class="sm-console" data-console>
+          <div class="sm-send">
+            <p class="sm-now">
+              <span class="sm-status" data-status>Send an event</span>
+              <span class="sm-now-state">
+                <span class="sr-only">Current state:</span>
+                <span class="code" data-now>{m.initial}</span>
+              </span>
+            </p>
+            <div class="sm-events" role="group" aria-label="Events to send to the state machine">
+              {
+                m.events.map((ev) => {
+                  const to = targetFrom(m.initial, ev);
+                  return (
+                    <button type="button" class:list={['sm-btn', { 'is-valid': to }]} data-event={ev}>
+                      <span class="code sm-btn-ev">{ev}</span>
+                      <span class="sm-btn-hint" data-hint>{to ? `to ${to}` : 'will be rejected'}</span>
+                    </button>
+                  );
+                })
+              }
+            </div>
+            <button type="button" class="sm-reset" data-reset>
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M7 2.5 V11.5 M2.5 7 H11.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+              </svg>
+              New patient
+            </button>
+          </div>
+
+          <div class="sm-logwrap">
+            <p class="sm-log-title" id="sm-log-title">Event log</p>
+            <ol class="sm-log code" aria-live="polite" aria-labelledby="sm-log-title" data-log>
+              <li class="sm-log-line">
+                <span class="sm-log-ev">new patient</span>
+                <span class="sm-log-res">{m.initial}</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <ul class="sm-notes">
+        {
+          m.notes.map((note) => (
+            <li>
+              {annotate(note).map((t) => (t.code ? <span class="code">{t.part}</span> : t.part))}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <div class="ph-lower">
+      <div class="ph-services">
+        <h4 class="ph-h4">Five services</h4>
+        <ul class="svc-list">
+          {
+            p.services.map((s) => (
+              <li>
+                <span class:list={['svc', 'code', { 'svc--mine': isMine(s.name) }]}>{s.name}</span>
+                <span class="svc-note">{s.note}</span>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="svc-legend">
+          <span class="svc-legend-item"><i class="svc-swatch svc-swatch--mine"></i>built by me</span>
+          <span class="svc-legend-item"><i class="svc-swatch"></i>built by teammates</span>
+        </p>
+      </div>
+
+      <div class="ph-queues" data-lanes>
+        <h4 class="ph-h4">Two RabbitMQ queues</h4>
+        <ol class="lanes">
+          {
+            p.queues.map((q) => (
+              <li class="lane">
+                <span class="sr-only">
+                  {q.from.join(' and ')} publish to {q.name}, consumed by {q.to}.
+                </span>
+                <div class="lane-from" aria-hidden="true">
+                  {q.from.map((name) => (
+                    <span class:list={['svc', 'code', { 'svc--mine': isMine(name) }]}>{name}</span>
+                  ))}
+                </div>
+                <div class="lane-pipe" aria-hidden="true">
+                  <span class="lane-packet"></span>
+                  <span class="lane-queue code">{q.name}</span>
+                </div>
+                <div class="lane-to" aria-hidden="true">
+                  <span class:list={['svc', 'code', { 'svc--mine': isMine(q.to) }]}>{q.to}</span>
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+
+      <div class="ph-facts">
+        <div>
+          <h4 class="ph-h4">What it covers</h4>
+          <ul class="ph-features">
+            {p.features.map((f) => <li>{f}</li>)}
+          </ul>
+        </div>
+        <div>
+          <h4 class="ph-h4">Built with</h4>
+          <ul class="ph-stack">
+            {p.stack.map((s) => <li>{s}</li>)}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .ph {
+    --hair: var(--line);
+    --dim: color-mix(in oklch, var(--muted) 46%, var(--white));
+  }
+
+  /* ---------- Header ---------- */
+  .ph-head {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .ph-name {
+    font-size: var(--text-2xl);
+    font-weight: 780;
+    font-stretch: 118%;
+    letter-spacing: -0.025em;
+    max-width: 14ch;
+  }
+
+  .ph-meta {
+    margin-top: 1rem;
+    color: var(--fg-muted);
+    font-weight: 500;
+  }
+
+  .ph-summary {
+    margin-top: 1.25rem;
+    max-width: 52ch;
+    color: var(--fg-muted);
+  }
+
+  .ph-context {
+    color: var(--fg-muted);
+    max-width: 44ch;
+  }
+
+  .ph-mine {
+    margin-top: 0.75rem;
+    font-size: var(--text-lg);
+    line-height: 1.38;
+    font-weight: 520;
+    color: var(--ink);
+    max-width: 34ch;
+  }
+
+  .ph-link {
+    margin-top: 1.75rem;
+  }
+
+  .ph-h4 {
+    font-size: var(--text-base);
+    font-weight: 700;
+    font-stretch: 108%;
+    letter-spacing: -0.005em;
+    line-height: 1.2;
+  }
+
+  /* ---------- State machine ---------- */
+  .sm {
+    margin-top: clamp(3rem, 2rem + 4vw, 5.5rem);
+    padding-top: clamp(1.75rem, 1.2rem + 1.6vw, 2.75rem);
+    border-top: 1px solid var(--ink);
+  }
+
+  .sm-intro {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .sm-lead {
+    color: var(--fg-muted);
+    max-width: 52ch;
+  }
+
+  .sm-stage {
+    display: grid;
+    gap: 2rem;
+    margin-top: 1.75rem;
+  }
+
+  .sm-figure {
+    min-width: 0;
+  }
+
+  .sm-svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  .sm-svg--wide {
+    display: none;
+    max-width: 58rem;
+  }
+
+  .sm-svg--tall {
+    max-width: 21rem;
+    margin-inline: auto;
+  }
+
+  .sm-init circle,
+  .sm-init-head {
+    fill: var(--ink);
+  }
+
+  .sm-init-line {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.5;
+  }
+
+  .sm-line {
+    fill: none;
+    stroke: var(--dim);
+    stroke-width: 1.5;
+    transition: stroke var(--dur-2) var(--ease-out);
+  }
+
+  .sm-head {
+    fill: var(--dim);
+    transition: fill var(--dur-2) var(--ease-out);
+  }
+
+  .sm-ev {
+    font-size: 14px;
+    font-weight: 500;
+    fill: var(--muted);
+    transition: fill var(--dur-2) var(--ease-out);
+  }
+
+  .sm-svg--tall .sm-ev {
+    font-size: 12.5px;
+  }
+
+  /* Transitions that can fire from the current state */
+  .sm-edge.is-open .sm-line {
+    stroke: var(--violet-600);
+    stroke-width: 2;
+  }
+
+  .sm-edge.is-open .sm-head {
+    fill: var(--violet-600);
+  }
+
+  .sm-edge.is-open .sm-ev {
+    fill: var(--violet-600);
+    font-weight: 650;
+  }
+
+  /* Transitions this patient has already taken */
+  .sm-edge.is-taken .sm-line {
+    stroke: var(--ink);
+    stroke-width: 2;
+  }
+
+  .sm-edge.is-taken .sm-head,
+  .sm-edge.is-taken .sm-ev {
+    fill: var(--ink);
+  }
+
+  .sm-box {
+    fill: var(--white);
+    stroke: var(--ink);
+    stroke-width: 1.5;
+    transition:
+      fill var(--dur-2) var(--ease-out),
+      stroke var(--dur-2) var(--ease-out);
+  }
+
+  .sm-box-inner {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.25;
+    transition: stroke var(--dur-2) var(--ease-out);
+  }
+
+  .sm-name {
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--ink);
+  }
+
+  .sm-svg--tall .sm-name {
+    font-size: 13.5px;
+  }
+
+  .sm-state.is-active .sm-box {
+    fill: var(--signal);
+    stroke: var(--indigo-950);
+    stroke-width: 2;
+  }
+
+  .sm-state.is-active[data-tone='flare'] .sm-box {
+    fill: var(--flare);
+  }
+
+  .sm-state.is-active .sm-name {
+    fill: var(--indigo-950);
+    font-weight: 700;
+  }
+
+  .sm-state.is-rejected .sm-box {
+    fill: color-mix(in oklch, var(--flare) 30%, var(--white));
+    stroke: var(--flare);
+    stroke-width: 3;
+  }
+
+  .sm-state.is-rejected .sm-box-inner {
+    stroke: var(--flare);
+  }
+
+  .sm-token {
+    fill: var(--signal);
+    stroke: var(--indigo-950);
+    stroke-width: 1.75;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sm-key {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
+    margin-top: 1.5rem;
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+  }
+
+  .sm-key-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sm-key i {
+    flex: none;
+    display: block;
+  }
+
+  .sm-key-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--ink);
+  }
+
+  .sm-key-final {
+    width: 1.5rem;
+    height: 0.95rem;
+    border-radius: 4px;
+    border: 1.5px solid var(--ink);
+    box-shadow: inset 0 0 0 2px var(--white), inset 0 0 0 3px var(--ink);
+  }
+
+  .sm-key-active {
+    width: 1.5rem;
+    height: 0.95rem;
+    border-radius: 4px;
+    border: 1.5px solid var(--indigo-950);
+    background: var(--signal);
+  }
+
+  /* ---------- Console ---------- */
+  .sm-console {
+    display: grid;
+    gap: 1.75rem;
+    align-content: start;
+    min-width: 0;
+  }
+
+  .sm-now {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    font-weight: 650;
+  }
+
+  .sm-now-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--ink);
+  }
+
+  .sm-now-state::before {
+    content: '';
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow: 0 0 0 1.5px var(--indigo-950);
+  }
+
+  .sm-events {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+  }
+
+  .sm-btn {
+    display: grid;
+    gap: 0.2rem;
+    justify-items: start;
+    text-align: left;
+    min-height: 3.5rem;
+    padding: 0.65rem 0.95rem;
+    border-radius: var(--r-md);
+    background: var(--white);
+    box-shadow: inset 0 0 0 1.5px var(--hair);
+    color: var(--ink);
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out),
+      color var(--dur-2) var(--ease-out),
+      transform var(--dur-1) var(--ease-out);
+  }
+
+  .sm-btn:hover {
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+  }
+
+  .sm-btn:active {
+    transform: scale(0.985);
+  }
+
+  .sm-btn-ev {
+    font-size: 0.875rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .sm-btn-hint {
+    font-size: var(--text-sm);
+    line-height: 1.2;
+    color: var(--fg-muted);
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .sm-btn.is-valid {
+    background: var(--violet-600);
+    box-shadow: inset 0 0 0 1.5px var(--violet-600);
+    color: var(--white);
+  }
+
+  .sm-btn.is-valid:hover {
+    background: var(--indigo-700);
+    box-shadow: inset 0 0 0 1.5px var(--indigo-700);
+  }
+
+  .sm-btn.is-valid .sm-btn-hint {
+    color: var(--violet-200);
+  }
+
+  .sm-btn:focus-visible,
+  .sm-reset:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+    border-radius: var(--r-md);
+  }
+
+  .sm-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    margin-top: 0.5rem;
+    padding: 0.4rem 0.2rem;
+    font-weight: 650;
+    color: var(--violet-600);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 0.25em;
+    transition: text-decoration-color var(--dur-2) var(--ease-out);
+  }
+
+  .sm-reset:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .sm-log-title {
+    font-weight: 650;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .sm-log {
+    display: grid;
+    align-content: start;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    /* room for five two-line entries, so the page never jumps */
+    min-height: 16.5rem;
+  }
+
+  .sm-log :global(.sm-log-line) {
+    display: grid;
+    gap: 0.1rem;
+    padding-block: 0.5rem;
+    border-bottom: 1px solid var(--hair);
+    color: var(--fg-muted);
+  }
+
+  .sm-log :global(.sm-log-line:first-child) {
+    color: var(--ink);
+  }
+
+  .sm-log :global(.sm-log-ev) {
+    font-weight: 600;
+  }
+
+  .sm-log :global(.sm-log-res) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    overflow-wrap: anywhere;
+  }
+
+  .sm-log :global(.sm-log-res::before) {
+    content: '';
+    flex: none;
+    width: 0.5em;
+    height: 0.5em;
+    border-radius: 50%;
+    background: var(--signal-deep);
+    transform: translateY(-0.05em);
+  }
+
+  .sm-log :global(.sm-log-res.is-rejected::before) {
+    border-radius: 1px;
+    background: var(--flare);
+  }
+
+  /* ---------- Notes ---------- */
+  .sm-notes {
+    display: grid;
+    gap: 0;
+    margin-top: 2rem;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--fg-muted);
+  }
+
+  .sm-notes li {
+    padding-block: 0.85rem;
+    border-top: 1px solid var(--hair);
+    max-width: 60ch;
+  }
+
+  .sm-notes .code {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  /* ---------- Lower: services, queues, facts ---------- */
+  .ph-lower {
+    display: grid;
+    gap: 2.75rem;
+    margin-top: clamp(3rem, 2rem + 4vw, 5rem);
+    padding-top: clamp(1.75rem, 1.2rem + 1.6vw, 2.75rem);
+    border-top: 1px solid var(--hair);
+  }
+
+  .svc {
+    display: inline-block;
+    padding: 0.32em 0.6em;
+    border-radius: var(--r-sm);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+    white-space: nowrap;
+  }
+
+  .svc--mine {
+    background: var(--violet-600);
+    color: var(--white);
+    box-shadow: none;
+  }
+
+  .svc-list {
+    display: grid;
+    margin-top: 1rem;
+  }
+
+  .svc-list li {
+    display: grid;
+    gap: 0.35rem;
+    justify-items: start;
+    padding-block: 0.7rem;
+    border-top: 1px solid var(--hair);
+  }
+
+  .svc-note {
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    color: var(--fg-muted);
+  }
+
+  .svc-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--hair);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .svc-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .svc-swatch {
+    display: block;
+    width: 1.4rem;
+    height: 0.9rem;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+  }
+
+  .svc-swatch--mine {
+    background: var(--violet-600);
+    box-shadow: none;
+  }
+
+  /* Queue lanes. Narrow: vertical flow. Wide container: publishers, pipe, consumer in a row. */
+  .ph-queues {
+    container-type: inline-size;
+    min-width: 0;
+  }
+
+  .lanes {
+    display: grid;
+    margin-top: 1rem;
+  }
+
+  .lane {
+    display: grid;
+    justify-items: start;
+    padding-block: 1.1rem;
+    border-top: 1px solid var(--hair);
+  }
+
+  .lane-from {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .lane-pipe {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 3.75rem;
+    padding-left: 2.1rem;
+    margin-left: 0.9rem;
+  }
+
+  /* the line */
+  .lane-pipe::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 5px;
+    width: 1.5px;
+    background: var(--ink);
+  }
+
+  /* the arrowhead */
+  .lane-pipe::after {
+    content: '';
+    position: absolute;
+    left: -4px;
+    bottom: 0;
+    border: 4.75px solid transparent;
+    border-top: 9px solid var(--ink);
+    border-bottom: 0;
+  }
+
+  .lane-queue {
+    font-size: 0.8125rem;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* a message in flight */
+  .lane-packet {
+    position: absolute;
+    left: -3.25px;
+    top: 0;
+    bottom: 12px;
+    width: 8px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .lane-packet::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--flare);
+  }
+
+  :global(.is-live) .lane-packet {
+    animation: lane-y 2.6s var(--ease-in-out) infinite;
+  }
+
+  :global(.is-live) .lane:nth-child(2) .lane-packet {
+    animation-delay: 1.3s;
+  }
+
+  @keyframes lane-y {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    60% {
+      opacity: 1;
+    }
+    72%,
+    100% {
+      transform: translateY(calc(100% - 8px));
+      opacity: 0;
+    }
+  }
+
+  @keyframes lane-x {
+    0% {
+      transform: translateX(0);
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    60% {
+      opacity: 1;
+    }
+    72%,
+    100% {
+      transform: translateX(calc(100% - 8px));
+      opacity: 0;
+    }
+  }
+
+  @container (min-width: 31rem) {
+    .lane {
+      grid-template-columns: auto minmax(9rem, 1fr) auto;
+      align-items: center;
+      justify-items: stretch;
+      gap: 0.6rem;
+    }
+
+    .lane-from {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .lane-pipe {
+      justify-content: center;
+      min-height: 2.75rem;
+      padding: 0;
+      margin: 0;
+    }
+
+    .lane-pipe::before {
+      left: 0;
+      right: 5px;
+      top: 50%;
+      bottom: auto;
+      width: auto;
+      height: 1.5px;
+      transform: translateY(-50%);
+    }
+
+    .lane-pipe::after {
+      left: auto;
+      right: 0;
+      top: 50%;
+      bottom: auto;
+      transform: translateY(-50%);
+      border: 4.75px solid transparent;
+      border-left: 9px solid var(--ink);
+      border-right: 0;
+    }
+
+    .lane-queue {
+      position: relative;
+      padding-inline: 0.5rem;
+      margin-right: 9px;
+      background: var(--white);
+    }
+
+    .lane-packet {
+      left: 0;
+      right: 12px;
+      top: calc(50% - 4px);
+      bottom: auto;
+      width: auto;
+      height: 8px;
+    }
+
+    :global(.is-live) .lane-packet {
+      animation-name: lane-x;
+    }
+  }
+
+  .ph-facts {
+    display: grid;
+    gap: 2rem;
+    align-content: start;
+  }
+
+  .ph-features {
+    margin-top: 1rem;
+    font-size: var(--text-sm);
+    line-height: 1.4;
+  }
+
+  .ph-features li {
+    padding-block: 0.5rem;
+    border-top: 1px solid var(--hair);
+  }
+
+  .ph-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--hair);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--fg-muted);
+  }
+
+  .ph-stack li:not(:last-child)::after {
+    content: ',';
+    margin-right: 0.4em;
+  }
+
+  /* ---------- Breakpoints ---------- */
+  @media (min-width: 640px) {
+    .sm-stage {
+      grid-template-columns: 21rem minmax(0, 1fr);
+      gap: 2.5rem;
+      align-items: start;
+    }
+
+    .sm-notes {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0 2rem;
+    }
+
+    .svc-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 2rem;
+    }
+
+    .ph-facts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2.5rem;
+    }
+
+    .ph-features {
+      columns: 2;
+      column-gap: 2rem;
+    }
+
+    .ph-features li {
+      break-inside: avoid;
+    }
+  }
+
+  @media (min-width: 860px) {
+    .ph-head {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: 3rem;
+      align-items: end;
+    }
+
+    .sm-intro {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: 3rem;
+      align-items: baseline;
+    }
+
+    .sm-svg--wide {
+      display: block;
+    }
+
+    .sm-svg--tall {
+      display: none;
+    }
+
+    .sm-stage {
+      grid-template-columns: minmax(0, 1fr);
+      margin-top: 2.5rem;
+    }
+
+    .sm-key {
+      justify-content: flex-start;
+    }
+
+    .sm-console {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 3rem;
+    }
+
+    .sm-events {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .ph-lower {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      gap: 3rem 3.5rem;
+    }
+
+    .svc-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ph-facts {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (min-width: 1240px) {
+    .sm-stage {
+      grid-template-columns: minmax(0, 1fr) 20rem;
+      gap: 3.5rem;
+    }
+
+    .sm-console {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.75rem;
+    }
+
+    .ph-lower {
+      grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(0, 3fr);
+      gap: 3rem;
+    }
+
+    .ph-facts {
+      grid-column: auto;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2rem;
+    }
+
+    .ph-features {
+      columns: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lane-packet {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, reduced, EASE, whenVisible } from '../scripts/motion';
+
+  type Machine = {
+    initial: string;
+    states: string[];
+    final: string[];
+    events: string[];
+    transitions: { from: string; to: string; event: string }[];
+  };
+
+  function initHospital() {
+    const root = document.querySelector<HTMLElement>('#project-hospital [data-machine-root]');
+    const raw = root?.querySelector('[data-machine]')?.textContent;
+    if (!root || !raw) return;
+
+    const machine: Machine = JSON.parse(raw);
+
+    // The whole machine: a lookup from (state, event) to the next state.
+    const table = new Map(machine.transitions.map((t) => [`${t.from}|${t.event}`, t.to]));
+    const next = (state: string, event: string) => table.get(`${state}|${event}`) ?? null;
+
+    const svgs = [...root.querySelectorAll<SVGSVGElement>('[data-diagram]')];
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-event]')];
+    const resetBtn = root.querySelector<HTMLButtonElement>('[data-reset]');
+    const log = root.querySelector<HTMLOListElement>('[data-log]');
+    const nowEl = root.querySelector<HTMLElement>('[data-now]');
+    const statusEl = root.querySelector<HTMLElement>('[data-status]');
+    const LOG_MAX = 5;
+
+    let state = machine.initial; // what the machine holds
+    let shown = machine.initial; // what the diagram shows (lags while the token travels)
+    const taken = new Set<string>();
+    let travel: gsap.core.Tween | null = null;
+    let demo: gsap.core.Tween[] = [];
+
+    const visibleSvg = () => svgs.find((s) => s.getClientRects().length > 0) ?? null;
+
+    function render() {
+      for (const svg of svgs) {
+        svg.querySelectorAll<SVGGElement>('[data-state]').forEach((g) => {
+          g.classList.toggle('is-active', g.dataset.state === shown);
+        });
+        svg.querySelectorAll<SVGGElement>('[data-edge]').forEach((g) => {
+          g.classList.toggle('is-open', g.dataset.from === state && shown === state);
+          g.classList.toggle('is-taken', taken.has(g.dataset.edge ?? ''));
+        });
+      }
+      for (const b of buttons) {
+        const to = next(state, b.dataset.event ?? '');
+        b.classList.toggle('is-valid', Boolean(to));
+        const hint = b.querySelector('[data-hint]');
+        if (hint) hint.textContent = to ? `to ${to}` : 'will be rejected';
+      }
+      if (nowEl) nowEl.textContent = state;
+    }
+
+    function write(event: string, result: string, rejected = false) {
+      if (!log) return;
+      const li = document.createElement('li');
+      li.className = 'sm-log-line';
+      const ev = document.createElement('span');
+      ev.className = 'sm-log-ev';
+      ev.textContent = event;
+      const res = document.createElement('span');
+      res.className = 'sm-log-res' + (rejected ? ' is-rejected' : '');
+      res.textContent = result;
+      li.append(ev, res);
+      log.prepend(li);
+      while (log.children.length > LOG_MAX) log.lastElementChild?.remove();
+      if (!reduced) gsap.from(li, { opacity: 0, y: -8, duration: 0.45, ease: EASE.out, clearProps: 'all' });
+    }
+
+    function settle() {
+      if (travel) {
+        travel.kill();
+        travel = null;
+      }
+      svgs.forEach((s) => gsap.set(s.querySelector('.sm-token'), { opacity: 0 }));
+      shown = state;
+      render();
+    }
+
+    function pulse(name: string) {
+      if (reduced) return;
+      const el = visibleSvg()?.querySelector(`[data-state="${name}"] .sm-state-in`);
+      if (el) gsap.fromTo(el, { scale: 1.07, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.7, ease: EASE.out, clearProps: 'transform' });
+    }
+
+    function reject(name: string) {
+      for (const svg of svgs) {
+        const g = svg.querySelector<SVGGElement>(`[data-state="${name}"]`);
+        if (!g) continue;
+        g.classList.add('is-rejected');
+        window.setTimeout(() => g.classList.remove('is-rejected'), 520);
+      }
+      if (reduced) return;
+      const el = visibleSvg()?.querySelector(`[data-state="${name}"] .sm-state-in`);
+      if (el) gsap.fromTo(el, { x: 0 }, { keyframes: { x: [0, -7, 6, -4, 2, 0] }, duration: 0.42, ease: 'none', clearProps: 'transform', overwrite: true });
+    }
+
+    function send(event: string) {
+      settle();
+      const from = state;
+      const to = next(from, event);
+
+      if (!to) {
+        const why = machine.final.includes(from) ? `${from} is final` : `no transition from ${from}`;
+        write(event, `rejected: ${why}`, true);
+        reject(from);
+        return;
+      }
+
+      const key = `${from}|${event}`;
+      state = to;
+      taken.add(key);
+      write(event, `${from} → ${to}`);
+
+      const svg = visibleSvg();
+      const path = svg?.querySelector<SVGPathElement>(`[data-edge="${CSS.escape(key)}"] .sm-line`);
+      const token = svg?.querySelector<SVGCircleElement>('.sm-token');
+      if (reduced || !path || !token) {
+        shown = to;
+        render();
+        return;
+      }
+
+      render(); // buttons and readout move now; the diagram follows the token
+      const length = path.getTotalLength();
+      const pos = { t: 0 };
+      const place = () => {
+        const pt = path.getPointAtLength(pos.t * length);
+        token.setAttribute('cx', String(pt.x));
+        token.setAttribute('cy', String(pt.y));
+      };
+      place();
+      gsap.set(token, { opacity: 1 });
+      travel = gsap.to(pos, {
+        t: 1,
+        duration: gsap.utils.clamp(0.55, 1.15, length / 520),
+        ease: EASE.inOut,
+        onUpdate: place,
+        onComplete: () => {
+          travel = null;
+          gsap.to(token, { opacity: 0, duration: 0.2, ease: 'none' });
+          shown = state;
+          render();
+          pulse(state);
+        },
+      });
+    }
+
+    function reset() {
+      settle();
+      state = machine.initial;
+      shown = machine.initial;
+      taken.clear();
+      write('new patient', machine.initial);
+      render();
+      pulse(machine.initial);
+    }
+
+    function stopDemo() {
+      if (!demo.length) return;
+      demo.forEach((d) => d.kill());
+      demo = [];
+      if (statusEl) statusEl.textContent = 'Send an event';
+    }
+
+    buttons.forEach((b) =>
+      b.addEventListener('click', () => {
+        stopDemo();
+        send(b.dataset.event ?? '');
+      }),
+    );
+    resetBtn?.addEventListener('click', () => {
+      stopDemo();
+      reset();
+    });
+    // Any deliberate contact with the console ends the demo, even before a click lands.
+    const consoleEl = root.querySelector('[data-console]');
+    consoleEl?.addEventListener('pointerdown', stopDemo);
+    consoleEl?.addEventListener('keydown', stopDemo);
+
+    render();
+
+    // Entrance, then a short self-running demo: two transitions and a fresh patient.
+    whenVisible(
+      root.querySelector('.sm-stage'),
+      () => {
+        const svg = visibleSvg();
+        if (svg) {
+          const lines = [...svg.querySelectorAll<SVGPathElement>('.sm-line, .sm-init-line')];
+          lines.forEach((line, i) => {
+            const len = line.getTotalLength();
+            gsap.fromTo(
+              line,
+              { strokeDasharray: len, strokeDashoffset: len },
+              { strokeDashoffset: 0, duration: 1, delay: 0.15 + i * 0.07, ease: EASE.inOut, clearProps: 'strokeDasharray,strokeDashoffset' },
+            );
+          });
+          gsap.from(svg.querySelectorAll('.sm-head, .sm-init-head, .sm-ev'), { opacity: 0, duration: 0.5, delay: 0.95, stagger: 0.03, ease: 'none', clearProps: 'opacity' });
+          gsap.from(svg.querySelectorAll('.sm-state-in'), { opacity: 0, scale: 0.94, transformOrigin: '50% 50%', duration: 0.7, stagger: 0.08, ease: EASE.out, clearProps: 'all' });
+        }
+
+        const first = machine.transitions.find((t) => t.from === machine.initial);
+        const second = first && machine.transitions.find((t) => t.from === first.to);
+        if (!first || !second) return;
+        if (statusEl) statusEl.textContent = 'Demo running';
+        demo = [
+          gsap.delayedCall(1.7, () => send(first.event)),
+          gsap.delayedCall(3.3, () => send(second.event)),
+          gsap.delayedCall(5.4, () => {
+            reset();
+            demo = [];
+            if (statusEl) statusEl.textContent = 'Your turn';
+          }),
+        ];
+      },
+      'top 70%',
+    );
+
+    // Queue packets only run while the lanes are on screen (CSS pauses nothing by itself).
+    const lanes = document.querySelector<HTMLElement>('#project-hospital [data-lanes]');
+    if (lanes && !reduced && 'IntersectionObserver' in window) {
+      let onScreen = false;
+      const sync = () => lanes.classList.toggle('is-live', onScreen && !document.hidden);
+      new IntersectionObserver(([entry]) => {
+        onScreen = entry.isIntersecting;
+        sync();
+      }).observe(lanes);
+      document.addEventListener('visibilitychange', sync);
+    }
+  }
+
+  initHospital();
+</script>

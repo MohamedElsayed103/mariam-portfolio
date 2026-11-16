@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="404, not found" description="This route does not exist.">
+  <main id="main">
+    <section data-theme="dark" class="nf">
+      <div class="wrap">
+        <p class="code status"><span class="lamp"></span> 404 Not Found</p>
+        <h1>No handler mapped for this route.</h1>
+        <p class="lede">The page you asked for does not exist. The rest of the system is healthy.</p>
+        <a class="btn btn-signal" href="/">Back to the portfolio</a>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .nf {
+    min-height: 100svh;
+    display: grid;
+    align-items: center;
+    padding-block: var(--section);
+  }
+
+  .wrap {
+    display: grid;
+    gap: 1.5rem;
+    justify-items: start;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6em;
+    color: var(--fg-muted);
+    --lamp: var(--flare);
+  }
+
+  h1 {
+    font-size: var(--text-3xl);
+    max-width: 14ch;
+  }
+</style>

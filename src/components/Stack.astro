@@ -1,0 +1,574 @@
+---
+import { stack, experience, projects } from '../data/cv';
+
+// Where each technology shows up elsewhere in the CV data. Derived, never typed by hand.
+const list = new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' });
+const roles = [...experience].reverse();
+const builds = [projects.telephony, projects.hospital, projects.video];
+
+function traceOf(name: string): string | null {
+  const at = roles.filter((r) => r.stack.includes(name)).map((r) => r.company);
+  const within = builds.filter((p) => p.stack.includes(name)).map((p) => p.name);
+  if (!at.length && !within.length) return null;
+  if (at.length && within.length) return `Used at ${list.format(at)}, and in ${list.format(within)}.`;
+  return at.length ? `Used at ${list.format(at)}.` : `Used in ${list.format(within)}.`;
+}
+
+const layers = stack.map((layer, i) => {
+  const items = layer.items.map((name) => ({
+    name,
+    lead: name === layer.lead || name.startsWith(`${layer.lead} `),
+    trace: traceOf(name),
+  }));
+  const traced = items.filter((it) => it.trace);
+  const first = traced.find((it) => it.lead) ?? traced[0] ?? null;
+  return { ...layer, items, first, depth: i / (stack.length - 1), bedrock: i === stack.length - 1 };
+});
+---
+
+<section id="stack" data-theme="dark">
+  <div class="wrap head">
+    <h2 class="h-section">The stack, bottom to top.</h2>
+    <div class="head-side">
+      <p class="lede">
+        Six layers, drawn the way they sit in a running service: languages at the surface, foundations underneath
+        carrying the rest.
+      </p>
+      <p class="key">
+        <i class="dot is-on" aria-hidden="true"></i>
+        <span>A lamp marks something used in the roles and projects on this page. Select it to see where.</span>
+      </p>
+    </div>
+  </div>
+
+  <ol class="strata">
+    {
+      layers.map((layer) => (
+        <li class:list={['band', { 'is-bedrock': layer.bedrock }]} style={`--depth:${layer.depth.toFixed(2)}`}>
+          <span class="band-rule" aria-hidden="true" />
+          <div class="wrap band-in">
+            <span class="node" aria-hidden="true" />
+            <h3 class="name">{layer.layer}</h3>
+            <ul class="items">
+              {layer.items.map((it) => {
+                const inner = (
+                  <>
+                    <span class="word">
+                      {it.name}
+                      {it.trace && <i class="dot" aria-hidden="true" />}
+                    </span>
+                    <span class="ghost" aria-hidden="true">
+                      {it.name}
+                      {it.trace && <i class="dot" />}
+                    </span>
+                  </>
+                );
+                return (
+                  <li class:list={['item', { 'is-lead': it.lead }]}>
+                    {it.trace ? (
+                      <button
+                        type="button"
+                        class="tech"
+                        data-name={it.name}
+                        data-trace={it.trace}
+                        aria-pressed={layer.first === it ? 'true' : 'false'}
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <span class="tech">{inner}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {layer.first && (
+              <p class="trace" aria-live="polite">
+                <strong class="trace-name">{layer.first.name}</strong>
+                <span class="trace-text">{layer.first.trace}</span>
+              </p>
+            )}
+          </div>
+        </li>
+      ))
+    }
+    <li class="pulse" aria-hidden="true" role="presentation"></li>
+  </ol>
+</section>
+
+<style>
+  section {
+    padding-top: var(--section);
+    overflow-x: clip;
+  }
+
+  /* ---------- Heading ---------- */
+  .head {
+    display: grid;
+    gap: 1.5rem;
+    padding-bottom: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  }
+
+  .head-side {
+    display: grid;
+    gap: 1.1rem;
+  }
+
+  .key {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7em;
+    max-width: 46ch;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--fg-muted);
+  }
+
+  .key .dot {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin: 0;
+    transform: translateY(-0.05em);
+  }
+
+  /* ---------- Strata ---------- */
+  .strata {
+    position: relative;
+    --rail: 1.75rem; /* width of the rail column */
+    --pad: clamp(1.1rem, 0.8rem + 1.2vw, 2rem);
+    --row: 2.75rem; /* one line of technologies; also the touch target */
+    --node-y: calc(var(--pad) + 0.7rem);
+    --tech-size: clamp(1.5rem, 1.02rem + 2.1vw, 2.75rem);
+    --dim: color-mix(in oklch, var(--fg-muted) 80%, var(--bg));
+  }
+
+  .band {
+    position: relative;
+    background: var(--band-bg, color-mix(in oklch, var(--indigo-900) calc(var(--depth) * 55%), var(--indigo-950)));
+    transition: background-color var(--dur-3) var(--ease-out);
+  }
+
+  .band-rule {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: var(--rule);
+    transform-origin: 0 50%;
+  }
+
+  .band-in {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    grid-template-areas:
+      'node name'
+      'node items'
+      'node trace';
+    padding-block: var(--pad) calc(var(--pad) * 1.15);
+  }
+
+  /* The rail: one segment per band, so the line reads as continuous through the stack. */
+  .band-in::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 5px;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .band:first-child .band-in::before {
+    top: var(--node-y);
+  }
+
+  .band.is-bedrock .band-in::before {
+    bottom: auto;
+    height: var(--node-y);
+  }
+
+  .node {
+    grid-area: node;
+    position: relative;
+    width: 11px;
+    height: 11px;
+    margin-top: calc(0.7rem - 5.5px);
+    border-radius: 50%;
+    background: var(--indigo-950);
+    box-shadow: inset 0 0 0 1.5px var(--violet-400);
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out);
+  }
+
+  .name {
+    grid-area: name;
+    font-size: 1.0625rem;
+    font-weight: 550;
+    font-stretch: 100%;
+    letter-spacing: 0;
+    line-height: 1.4rem;
+    color: var(--fg-muted);
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .items {
+    grid-area: items;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.8em;
+    margin-top: 0.35rem;
+    font-size: var(--tech-size);
+  }
+
+  .item {
+    display: flex;
+    min-width: 0;
+  }
+
+  .tech {
+    display: inline-grid;
+    align-items: center;
+    min-height: var(--row);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 320;
+    font-stretch: 98%;
+    line-height: 1.12;
+    letter-spacing: -0.012em;
+    text-align: left;
+    color: var(--fg-muted);
+    overflow-wrap: anywhere;
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .is-lead .tech {
+    font-weight: 760;
+    font-stretch: 112%;
+    letter-spacing: -0.022em;
+    color: var(--fg);
+  }
+
+  .tech {
+    --hot: 108%;
+  }
+
+  .is-lead .tech {
+    --hot: 124%;
+  }
+
+  button.tech {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .word,
+  .ghost {
+    grid-area: 1 / 1;
+    transition: font-stretch var(--dur-3) var(--ease-out);
+  }
+
+  /* Holds the width of the fully stretched word so neighbours never move. Only where hover exists. */
+  .ghost {
+    display: none;
+    visibility: hidden;
+    font-stretch: var(--hot, 125%);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Lamp on a technology: ring = it appears in the work on this page; lit = the one being traced. */
+  .dot {
+    display: inline-block;
+    width: 0.2em;
+    height: 0.2em;
+    min-width: 6px;
+    min-height: 6px;
+    margin-left: 0.16em;
+    border-radius: 50%;
+    vertical-align: 0.62em;
+    box-shadow: inset 0 0 0 1.5px var(--lamp);
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out);
+  }
+
+  .dot.is-on,
+  .tech[aria-pressed='true'] .word .dot {
+    background: var(--lamp);
+    box-shadow:
+      inset 0 0 0 1.5px var(--lamp),
+      0 0 0 3px color-mix(in oklch, var(--lamp) 22%, transparent);
+  }
+
+  .trace {
+    grid-area: trace;
+    margin-top: 0.6rem;
+    max-width: 44ch;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--fg-muted);
+  }
+
+  .trace-name {
+    font-weight: 650;
+    color: var(--fg);
+    margin-right: 0.35em;
+  }
+
+  /* ---------- Bedrock ---------- */
+  .band.is-bedrock {
+    background: var(--band-bg, var(--indigo-900));
+  }
+
+  .is-bedrock .band-rule {
+    height: 2px;
+    background: var(--violet-400);
+  }
+
+  .is-bedrock .band-in {
+    padding-bottom: clamp(3.5rem, 2rem + 6vw, 7rem);
+  }
+
+  .is-bedrock .node {
+    background: var(--lamp);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--lamp) 20%, transparent);
+  }
+
+  /* ---------- Lit band ---------- */
+  .band:focus-within,
+  .band:has(.node.is-hit) {
+    --lit: 1;
+  }
+
+  .band:focus-within {
+    --band-bg: color-mix(in oklch, var(--indigo-800) 62%, var(--indigo-950));
+  }
+
+  .band:focus-within .node,
+  .node.is-hit {
+    background: var(--lamp);
+    box-shadow: 0 0 0 5px color-mix(in oklch, var(--lamp) 24%, transparent);
+  }
+
+  .band:focus-within .name,
+  .band:focus-within .tech {
+    color: var(--fg);
+  }
+
+  .strata:has(.band:focus-within) .band:not(:focus-within) .tech {
+    color: var(--dim);
+  }
+
+  .tech:focus-visible .word {
+    font-stretch: var(--hot, 125%);
+  }
+
+  @media (hover: hover) {
+    .band:hover {
+      --band-bg: color-mix(in oklch, var(--indigo-800) 62%, var(--indigo-950));
+    }
+
+    .band:hover .node {
+      background: var(--lamp);
+      box-shadow: 0 0 0 5px color-mix(in oklch, var(--lamp) 24%, transparent);
+    }
+
+    .band:hover .name,
+    .band:hover .tech {
+      color: var(--fg);
+    }
+
+    .strata:has(.band:hover) .band:not(:hover):not(:focus-within) .tech {
+      color: var(--dim);
+    }
+
+    .tech:hover .word {
+      font-stretch: var(--hot, 125%);
+    }
+  }
+
+  /* ---------- The request that travels down the rail ---------- */
+  .pulse {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow:
+      0 0 0 4px color-mix(in oklch, var(--signal) 22%, transparent),
+      0 -14px 14px -4px color-mix(in oklch, var(--signal) 45%, transparent);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: var(--z-base);
+  }
+
+  /* ---------- Wider screens ---------- */
+  @media (min-width: 56rem) {
+    .head {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: end;
+      column-gap: var(--gutter);
+    }
+
+    .head-side {
+      justify-self: end;
+    }
+
+    .strata {
+      --rail: 2.75rem;
+      --node-y: calc(var(--pad) + var(--row) / 2);
+    }
+
+    .band-in {
+      grid-template-columns: var(--rail) minmax(11rem, 17rem) minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        'node name items'
+        'node trace items';
+      column-gap: 0;
+    }
+
+    .node {
+      margin-top: calc(var(--row) / 2 - 5.5px);
+    }
+
+    .name {
+      padding-top: calc((var(--row) - 1.4rem) / 2);
+      padding-right: 1.5rem;
+    }
+
+    .items {
+      margin-top: 0;
+      column-gap: 0.62em;
+    }
+
+    .tech {
+      white-space: nowrap;
+    }
+
+    .trace {
+      margin-top: 0.35rem;
+      padding-right: 2rem;
+    }
+  }
+
+  @media (min-width: 56rem) and (hover: hover) {
+    .ghost {
+      display: block;
+    }
+  }
+
+  @media (min-width: 56rem) and (hover: none) {
+    .tech:focus-visible .word {
+      font-stretch: inherit;
+    }
+  }
+
+  @media (max-width: 55.99rem) {
+    /* No reserved width down here, so the stretch would push neighbours around. */
+    .tech:hover .word,
+    .tech:focus-visible .word {
+      font-stretch: inherit;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, whenVisible, EASE } from '../scripts/motion';
+
+  const root = document.querySelector<HTMLElement>('#stack');
+
+  if (root) {
+    // Trace readout: hover or focus previews a technology, click keeps it.
+    root.querySelectorAll<HTMLElement>('.band').forEach((band) => {
+      const nameEl = band.querySelector<HTMLElement>('.trace-name');
+      const textEl = band.querySelector<HTMLElement>('.trace-text');
+      const buttons = Array.from(band.querySelectorAll<HTMLButtonElement>('button.tech'));
+      if (!nameEl || !textEl || !buttons.length) return;
+
+      const show = (b: HTMLButtonElement | undefined) => {
+        if (!b || nameEl.textContent === b.dataset.name) return;
+        nameEl.textContent = b.dataset.name ?? '';
+        textEl.textContent = b.dataset.trace ?? '';
+      };
+      const kept = () => buttons.find((b) => b.getAttribute('aria-pressed') === 'true') ?? buttons[0];
+
+      buttons.forEach((b) => {
+        b.addEventListener('pointerenter', (e) => {
+          if (e.pointerType === 'mouse') show(b);
+        });
+        b.addEventListener('pointerleave', () => show(kept()));
+        b.addEventListener('focus', () => show(b));
+        b.addEventListener('blur', () => show(kept()));
+        b.addEventListener('click', () => {
+          buttons.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+          show(b);
+        });
+      });
+    });
+
+    // Entrance: bedrock first, each rule drawn before its text settles, then one request runs down the rail.
+    const strata = root.querySelector<HTMLElement>('.strata');
+    whenVisible(
+      strata,
+      () => {
+        if (!strata) return;
+        const bands = Array.from(strata.querySelectorAll<HTMLElement>('.band'));
+        const tl = gsap.timeline();
+
+        [...bands].reverse().forEach((band, i) => {
+          const at = i * 0.1;
+          const settle = band.querySelectorAll('.name, .item, .trace');
+          tl.from(band.querySelector('.band-rule'), { scaleX: 0, duration: 0.7 }, at)
+            .from(band.querySelector('.node'), { scale: 0, duration: 0.45 }, at + 0.12)
+            .from(
+              settle,
+              { y: 16, autoAlpha: 0, duration: 0.6, stagger: 0.02, clearProps: 'transform,opacity,visibility' },
+              at + 0.16,
+            );
+        });
+
+        const pulse = strata.querySelector<HTMLElement>('.pulse');
+        const nodes = bands.map((b) => b.querySelector<HTMLElement>('.node')).filter((n): n is HTMLElement => !!n);
+        if (!pulse || nodes.length < 2) return;
+
+        const box = strata.getBoundingClientRect();
+        const centre = (n: HTMLElement) => {
+          const r = n.getBoundingClientRect();
+          return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top };
+        };
+        const points = nodes.map(centre);
+        const from = points[0];
+        const to = points[points.length - 1];
+        const travel = 1.5;
+        const start = tl.duration() - 0.35;
+
+        tl.set(pulse, { x: from.x, y: from.y, autoAlpha: 1 }, start).to(
+          pulse,
+          { y: to.y, duration: travel, ease: 'none' },
+          start,
+        );
+        points.forEach((p, i) => {
+          const t = start + ((p.y - from.y) / (to.y - from.y)) * travel;
+          tl.call(
+            () => {
+              nodes[i].classList.add('is-hit');
+              window.setTimeout(() => nodes[i].classList.remove('is-hit'), 520);
+            },
+            undefined,
+            t,
+          );
+        });
+        tl.to(pulse, { autoAlpha: 0, scale: 2.2, duration: 0.45, ease: EASE.quart }, start + travel);
+      },
+      'top 85%',
+    );
+  }
+</script>

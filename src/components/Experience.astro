@@ -1,0 +1,817 @@
+---
+import { experience, nextState } from '../data/cv';
+
+// One step per state the machine passes through; the last one is still pending.
+const steps = [
+  ...experience.map((r) => ({
+    id: r.id,
+    state: r.state,
+    transition: r.transition,
+    caption: r.company,
+    href: `#role-${r.id}`,
+    pending: false,
+  })),
+  {
+    id: 'next',
+    state: nextState.state,
+    transition: nextState.transition,
+    caption: nextState.label,
+    href: '#contact',
+    pending: true,
+  },
+];
+const last = steps.length - 1;
+---
+
+<section id="experience" data-theme="light" class="xp section-pad">
+  <div class="wrap">
+    <header class="xp-head">
+      <h2 class="h-section" data-xp-title>Experience, as a state machine.</h2>
+      <p class="lede">Each role is a state. Each arrow is the event that moved me into it.</p>
+    </header>
+
+    <div class="xp-grid">
+      <nav class="machine" aria-label="Career path, drawn as a state diagram">
+        <p class="machine-hint">Jump to a state</p>
+        <ol class="path">
+          {
+            steps.map((s, i) => (
+              <li class="step">
+                {i === 0 && <span class="origin" aria-hidden="true" />}
+                <span class:list={['edge', { 'edge-pending': s.pending }]} data-edge={i}>
+                  <span class="edge-base" />
+                  <span class="edge-fill" />
+                  <svg class="edge-head" width="12" height="9" viewBox="0 0 12 9" aria-hidden="true" focusable="false">
+                    <path d="M0.5 0h11L6 9z" />
+                  </svg>
+                  <span class="edge-token" aria-hidden="true"><i /></span>
+                  <span class="edge-label code">
+                    <span class="sr-only">on event </span>
+                    {s.transition}
+                  </span>
+                </span>
+                <a class:list={['state', 'step-link', { 'is-pending': s.pending }]} href={s.href} data-node={i}>
+                  <span class="node">
+                    <span class="node-lamp" aria-hidden="true" />
+                    <span class="node-name">{s.state}</span>
+                  </span>
+                  <span class="step-cap">
+                    <span class="step-co">{s.caption}</span>
+                    {s.pending && (
+                      <span class="step-go">
+                        Send the event
+                        <svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true" focusable="false">
+                          <path d="M0 5h11M7.5 1.5 11.5 5l-4 3.5" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                </a>
+              </li>
+            ))
+          }
+        </ol>
+      </nav>
+
+      <ol class="roles">
+        {
+          steps.map((s, i) => {
+            const r = experience[i];
+            return (
+              <li class:list={['role', { 'role-next': s.pending }]} id={s.pending ? 'role-next' : `role-${s.id}`} data-step={i}>
+                <div class="spine">
+                  {i === 0 && <span class="origin" aria-hidden="true" />}
+                  <span class:list={['edge', { 'edge-pending': s.pending }]} data-edge={i}>
+                    <span class="edge-base" />
+                    <span class="edge-fill" />
+                    <svg class="edge-head" width="12" height="9" viewBox="0 0 12 9" aria-hidden="true" focusable="false">
+                      <path d="M0.5 0h11L6 9z" />
+                    </svg>
+                    <span class="edge-token" aria-hidden="true"><i /></span>
+                    <span class="edge-label code">
+                      <span class="sr-only">on event </span>
+                      {s.transition}
+                    </span>
+                  </span>
+                  <div class:list={['state', { 'is-pending': s.pending }]} data-node={i}>
+                    <span class="node">
+                      <span class="node-lamp" aria-hidden="true" />
+                      <span class="node-name">
+                        <span class="sr-only">state </span>
+                        {s.state}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {r ? (
+                  <div class="role-body">
+                    <h3 class="company" tabindex="-1">{r.company}</h3>
+                    <p class="meta">
+                      <span class="title">{r.title}</span>
+                      <span class="period">{r.period}</span>
+                    </p>
+                    <ul class="points">
+                      {r.points.map((p) => (
+                        <li>{p}</li>
+                      ))}
+                    </ul>
+                    <ul class="stack" aria-label="Worked with">
+                      {r.stack.map((t) => (
+                        <li>{t}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div class="role-body">
+                    <h3 class="company" tabindex="-1">{nextState.label}</h3>
+                    <p class="meta">
+                      <span class="title">{nextState.note}</span>
+                      <span class="period">
+                        <span class="code">{nextState.transition}</span>
+                      </span>
+                    </p>
+                    <a class="btn btn-primary next-cta" href="#contact">
+                      Send the event
+                      <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true" focusable="false">
+                        <path d="M0 6h13M9 1.5 13.5 6 9 10.5" />
+                      </svg>
+                    </a>
+                  </div>
+                )}
+              </li>
+            );
+          })
+        }
+      </ol>
+    </div>
+  </div>
+</section>
+
+<style>
+  .xp {
+    --bg: var(--surface);
+    --idle: color-mix(in oklch, var(--ink) 30%, var(--surface));
+    --done: var(--violet-600);
+    /* x of the lamp centre inside a node: every line in the diagram runs through it */
+    --rail: 19px;
+    --edge-h: 3.75rem;
+    --node-h: 2.75rem;
+  }
+
+  .xp-head {
+    margin-bottom: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
+  }
+
+  .xp-head .lede {
+    margin-top: 1.25rem;
+  }
+
+  /* ---------- Diagram parts (shared by the overview and the inline spine) ---------- */
+  .origin {
+    display: block;
+    width: 12px;
+    height: 12px;
+    margin-left: calc(var(--rail) - 6px);
+    border-radius: 50%;
+    background: var(--done);
+  }
+
+  .edge {
+    position: relative;
+    display: block;
+    height: var(--edge-h);
+  }
+
+  .edge-base,
+  .edge-fill {
+    position: absolute;
+    left: calc(var(--rail) - 1px);
+    top: 0;
+    bottom: 8px;
+    width: 2px;
+    transform-origin: 50% 0;
+  }
+
+  .edge-base {
+    background: var(--idle);
+  }
+
+  .edge-pending .edge-base {
+    background: repeating-linear-gradient(to bottom, var(--idle) 0 5px, transparent 5px 9px);
+  }
+
+  /* the pending arrow never becomes solid: the event has not happened yet */
+  .edge-pending .edge-fill {
+    display: none;
+  }
+
+  .edge-pending[data-done] .edge-base {
+    background: repeating-linear-gradient(to bottom, var(--done) 0 5px, transparent 5px 9px);
+  }
+
+  .edge-fill {
+    background: var(--done);
+    transform: scaleY(0);
+  }
+
+  .edge[data-done] .edge-fill {
+    transform: scaleY(1);
+  }
+
+  .edge-head {
+    position: absolute;
+    left: calc(var(--rail) - 6px);
+    bottom: 0;
+    fill: var(--idle);
+    transition: fill var(--dur-2) var(--ease-out);
+  }
+
+  .edge[data-done] .edge-head {
+    fill: var(--done);
+  }
+
+  /* The token rides a full-height carrier, so yPercent 0 to 100 walks the whole arrow. */
+  .edge-token {
+    position: absolute;
+    left: calc(var(--rail) - 7px);
+    top: -7px;
+    width: 14px;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .edge-token i {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow:
+      0 0 0 2px var(--indigo-900),
+      0 0 0 6px color-mix(in oklch, var(--signal) 45%, transparent);
+  }
+
+  .edge-label {
+    position: absolute;
+    left: calc(var(--rail) + 1.1rem);
+    top: calc(50% - 4px);
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    line-height: 1;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .edge[data-done] .edge-label {
+    color: var(--ink);
+  }
+
+  .node {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: var(--node-h);
+    padding: 0 14px 0 12.5px;
+    border: 1.5px solid var(--idle);
+    border-radius: var(--r-md);
+    background: var(--white);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 550;
+    font-variant-ligatures: none;
+    line-height: 1;
+    white-space: nowrap;
+    flex: none;
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      border-color var(--dur-2) var(--ease-out),
+      color var(--dur-2) var(--ease-out);
+  }
+
+  .node-lamp {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: none;
+    box-shadow: inset 0 0 0 1.5px var(--idle);
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out);
+  }
+
+  .state[data-status='upcoming'] .node {
+    color: var(--muted);
+  }
+
+  .state[data-status='visited'] .node {
+    border-color: var(--done);
+  }
+
+  .state[data-status='visited'] .node-lamp {
+    background: var(--done);
+    box-shadow: none;
+  }
+
+  .state[data-status='active'] .node {
+    background: var(--done);
+    border-color: var(--done);
+    color: var(--white);
+  }
+
+  .state[data-status='active'] .node-lamp {
+    background: var(--signal);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--signal) 32%, transparent);
+  }
+
+  /* Pending state: dashed outline, lamp already blinking for the next event. */
+  .state.is-pending .node {
+    border-style: dashed;
+    border-color: var(--violet-500);
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .state.is-pending .node-lamp {
+    background: var(--signal);
+    box-shadow: 0 0 0 1.5px var(--signal-deep);
+  }
+
+  .state.is-pending .node-lamp::after {
+    content: '';
+    position: absolute;
+    inset: -1.5px;
+    border-radius: 50%;
+    border: 1.5px solid var(--signal-deep);
+    opacity: 0.4;
+    transform: scale(1.8);
+  }
+
+  :global(.xp.is-live) .state.is-pending .node-lamp::after {
+    animation: xp-pulse 2.2s var(--ease-quart) infinite;
+  }
+
+  .state.is-pending[data-status='active'] .node {
+    background: var(--white);
+    border-color: var(--done);
+  }
+
+  @keyframes xp-pulse {
+    0% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    70%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+
+  /* ---------- Overview diagram. Compact strip below 1024, sticky full diagram above. ---------- */
+  .machine {
+    --edge-h: 1.125rem;
+    margin-bottom: 3.5rem;
+  }
+
+  .machine-hint {
+    margin-bottom: 0.9rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+
+  .machine .edge-label {
+    /* compact strip: the event names are read out, and shown in the spine below */
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .machine .edge-token {
+    display: none;
+  }
+
+  .machine .edge-base,
+  .machine .edge-fill {
+    bottom: 7px;
+  }
+
+  .step-link {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    text-decoration: none;
+    border-radius: var(--r-md);
+  }
+
+  .step-link .node {
+    width: 12rem;
+  }
+
+  .step-cap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    font-size: var(--text-sm);
+    line-height: 1.25;
+    font-weight: 500;
+    color: var(--muted);
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .step-co {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .step-link[data-status='active'] .step-cap,
+  .step-link[data-status='visited'] .step-cap,
+  .step-link:hover .step-cap {
+    color: var(--ink);
+  }
+
+  .step-link:hover .node {
+    border-color: var(--ink);
+  }
+
+  .step-link[data-status='active']:hover .node {
+    background: var(--indigo-700);
+    border-color: var(--indigo-700);
+  }
+
+  .step-go {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    font-weight: 650;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .step-go svg,
+  .next-cta svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  .step-link:hover .step-go svg,
+  .next-cta:hover svg {
+    transform: translateX(3px);
+  }
+
+  /* ---------- Roles. Below 1024 each one hangs off the spine. ---------- */
+  .role {
+    scroll-margin-top: 0.5rem;
+  }
+
+  .spine .state {
+    display: flex;
+  }
+
+  .role-body {
+    position: relative;
+    padding: 1.25rem 0 1.75rem 2.5rem;
+  }
+
+  /* the rail: the outgoing arrow of this state, running down beside its details */
+  .role-body::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--rail) - 1px);
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--idle);
+    transition: background-color var(--dur-3) var(--ease-out);
+  }
+
+  .role[data-status='visited'] .role-body::before {
+    background: var(--done);
+  }
+
+  .role-next .role-body::before {
+    content: none;
+  }
+
+  .role-next .role-body {
+    padding-bottom: 0;
+  }
+
+  .company {
+    font-size: clamp(1.75rem, 1.15rem + 2.4vw, 2.875rem);
+    font-weight: 780;
+    font-stretch: 116%;
+    line-height: 1.04;
+    letter-spacing: -0.022em;
+    max-width: 22ch;
+    overflow-wrap: break-word;
+  }
+
+  .company:focus-visible {
+    outline-offset: 6px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 1.1rem;
+    margin-top: 0.85rem;
+  }
+
+  .title {
+    font-size: var(--text-lg);
+    font-weight: 620;
+    font-stretch: 104%;
+    line-height: 1.3;
+  }
+
+  .period {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .points {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 1.4rem;
+    max-width: 65ch;
+  }
+
+  .points li {
+    position: relative;
+    padding-left: 1.35rem;
+  }
+
+  /* marker: the diagram's arrowhead, turned to point at the line */
+  .points li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.58em;
+    width: 7px;
+    height: 8px;
+    background: var(--violet-400);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
+
+  .stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 1.4rem;
+  }
+
+  .stack li {
+    padding: 0.3em 0.7em;
+    border-radius: var(--r-sm);
+    background: var(--white);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--ink);
+  }
+
+  .next-cta {
+    margin-top: 1.6rem;
+  }
+
+  @media (min-width: 1024px) {
+    .xp-grid {
+      display: grid;
+      grid-template-columns: minmax(22rem, 27rem) minmax(0, 1fr);
+      column-gap: clamp(3rem, -1rem + 7vw, 8rem);
+      align-items: start;
+    }
+
+    .machine {
+      --edge-h: clamp(2.5rem, 7.4vh, 4.5rem);
+      position: sticky;
+      top: calc(var(--nav-h) + clamp(1rem, 5vh, 3rem));
+      margin-bottom: 0;
+    }
+
+    .machine-hint {
+      display: none;
+    }
+
+    .machine .edge-label {
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip-path: none;
+    }
+
+    .machine .edge-token {
+      display: block;
+    }
+
+    .machine .edge-base,
+    .machine .edge-fill {
+      bottom: 8px;
+    }
+
+    .step-co {
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+    }
+
+    .spine {
+      display: none;
+    }
+
+    .role {
+      scroll-margin-top: 20vh;
+    }
+
+    .role + .role {
+      margin-top: clamp(3.5rem, 9vh, 6.5rem);
+    }
+
+    .role-body {
+      padding: 2.25rem 0 0;
+    }
+
+    /* the rail turns into a rule across the top; it fills violet while the state is active */
+    .role-body::before,
+    .role-body::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: auto;
+      width: 100%;
+      height: 2px;
+    }
+
+    .role-body::before,
+    .role[data-status='visited'] .role-body::before {
+      background: var(--line);
+    }
+
+    .role-body::after {
+      background: var(--done);
+      transform: scaleX(0);
+      transform-origin: 0 50%;
+      transition: transform var(--dur-3) var(--ease-out);
+    }
+
+    .role[data-status='active'] .role-body::after {
+      transform: scaleX(1);
+    }
+
+    .role-next .role-body::before {
+      content: '';
+      background: repeating-linear-gradient(to right, var(--idle) 0 5px, transparent 5px 9px);
+    }
+
+    .machine .node {
+      --node-h: 3rem;
+      width: 13rem;
+      font-size: 0.875rem;
+    }
+
+    .machine .edge-label {
+      font-size: 0.8125rem;
+    }
+
+    .step-cap {
+      font-size: 0.9375rem;
+    }
+
+    .company {
+      max-width: 20ch;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .step-link {
+      gap: 0.7rem;
+    }
+
+    .step-link .node {
+      width: 11.5rem;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, ScrollTrigger, reduced, EASE, whenVisible, splitWords } from '../scripts/motion';
+
+  const root = document.querySelector<HTMLElement>('#experience');
+  if (root) init(root);
+
+  function init(root: HTMLElement) {
+    const roles = [...root.querySelectorAll<HTMLElement>('[data-step]')];
+    const nodes = [...root.querySelectorAll<HTMLElement>('[data-node]')];
+    const edges = [...root.querySelectorAll<HTMLElement>('[data-edge]')];
+    if (!roles.length) return;
+
+    // Where a role has to be for its state to count as entered.
+    const LINE = 0.45;
+    let active = -2;
+
+    const setActive = (n: number) => {
+      if (n === active) return;
+      active = n;
+      for (const el of nodes) {
+        const i = Number(el.dataset.node);
+        el.dataset.status = i < n ? 'visited' : i === n ? 'active' : 'upcoming';
+        if (el instanceof HTMLAnchorElement) {
+          if (i === n) el.setAttribute('aria-current', 'step');
+          else el.removeAttribute('aria-current');
+        }
+      }
+      for (const el of edges) el.toggleAttribute('data-done', Number(el.dataset.edge) <= n);
+      roles.forEach((el, i) => (el.dataset.status = i < n ? 'visited' : i === n ? 'active' : 'upcoming'));
+    };
+
+    const sync = () => {
+      const line = window.innerHeight * LINE;
+      let n = -1;
+      roles.forEach((el, i) => {
+        if (el.getBoundingClientRect().top <= line) n = i;
+      });
+      setActive(n);
+    };
+
+    ScrollTrigger.create({
+      trigger: root,
+      start: 'top bottom',
+      end: 'bottom top',
+      onUpdate: sync,
+      onRefresh: sync,
+    });
+    sync();
+
+    // Jumping from the diagram moves focus to the role it points at.
+    root.querySelectorAll<HTMLAnchorElement>('.step-link[href^="#role-"]').forEach((link) => {
+      link.addEventListener('click', () => {
+        const heading = root.querySelector<HTMLElement>(`${link.hash} .company`);
+        // after the browser (or Lenis) has handled the jump, so the focus is not reset by it
+        for (const ms of [60, 320]) setTimeout(() => heading?.focus({ preventScroll: true }), ms);
+      });
+    });
+
+    // The pending lamp only blinks while the section is on screen and the tab is visible.
+    let onScreen = false;
+    const live = () => root.classList.toggle('is-live', onScreen && !document.hidden);
+    new IntersectionObserver((entries) => {
+      onScreen = entries.some((e) => e.isIntersecting);
+      live();
+    }).observe(root);
+    document.addEventListener('visibilitychange', live);
+
+    if (reduced) return;
+
+    // A token walks each arrow as its role approaches the line, in both directions.
+    roles.forEach((role, i) => {
+      const mine = edges.filter((e) => Number(e.dataset.edge) === i);
+      const fills = mine.map((e) => e.querySelector('.edge-fill'));
+      const tokens = mine.map((e) => e.querySelector('.edge-token'));
+      gsap
+        .timeline({
+          defaults: { ease: 'none' },
+          scrollTrigger: { trigger: role, start: 'top 74%', end: `top ${LINE * 100}%`, scrub: true },
+        })
+        .fromTo(fills, { scaleY: 0 }, { scaleY: 1, duration: 1 }, 0)
+        .fromTo(tokens, { yPercent: 0 }, { yPercent: 100, duration: 1 }, 0)
+        .fromTo(tokens, { opacity: 0 }, { opacity: 1, duration: 0.06 }, 0.001)
+        .to(tokens, { opacity: 0, duration: 0.06 }, 0.94);
+    });
+
+    const title = root.querySelector<HTMLElement>('[data-xp-title]');
+    if (title) {
+      whenVisible(title, () => {
+        gsap.from(splitWords(title), { yPercent: 110, duration: 1, stagger: 0.06, ease: EASE.out });
+      });
+    }
+
+    // Desktop only: the diagram assembles itself top to bottom, the way you would draw it.
+    const machine = root.querySelector<HTMLElement>('.machine');
+    if (machine && window.matchMedia('(min-width: 1024px)').matches) {
+      whenVisible(machine, () => {
+        const tl = gsap.timeline({ defaults: { ease: EASE.out } });
+        machine.querySelectorAll('.step').forEach((step, i) => {
+          const at = i * 0.11;
+          tl.from(step.querySelectorAll('.origin'), { scale: 0, duration: 0.5, clearProps: 'transform' }, at)
+            .from(step.querySelectorAll('.edge-base'), { scaleY: 0, duration: 0.6, clearProps: 'transform' }, at)
+            .from(step.querySelectorAll('.edge-head, .edge-label'), { opacity: 0, duration: 0.4, clearProps: 'opacity' }, at + 0.3)
+            .from(step.querySelectorAll('.step-link'), { opacity: 0, y: 10, duration: 0.7, clearProps: 'opacity,transform' }, at + 0.3);
+        });
+      });
+    }
+  }
+</script>

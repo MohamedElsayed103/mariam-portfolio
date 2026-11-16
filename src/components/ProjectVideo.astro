@@ -1,0 +1,780 @@
+---
+import { projects } from '../data/cv';
+
+const p = projects.video;
+const stage = Object.fromEntries(p.pipeline.map((s) => [s.id, s]));
+
+// Demo values. Generic on purpose: they illustrate the idea, they are not results.
+const query = 'a red car turning left';
+const duration = 600; // an illustrative ten minute video
+const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const segments = [
+  { at: 42, len: 30, audio: true, frames: true },
+  { at: 197, len: 36, audio: true, frames: false },
+  { at: 425, len: 28, audio: false, frames: true },
+].map((s) => ({ ...s, label: fmt(s.at), a: s.at / duration, b: (s.at + s.len) / duration }));
+const ruler = [0, 150, 300, 450, 600].map(fmt);
+
+const BARS = 96;
+const CELLS = 32;
+const noise = (i: number) => {
+  const v = Math.sin(i * 12.9898) * 43758.5453;
+  return v - Math.floor(v);
+};
+const hitIndex = (pos: number, key: 'audio' | 'frames') => segments.findIndex((s) => s[key] && pos >= s.a && pos <= s.b);
+const bars = Array.from({ length: BARS }, (_, i) => {
+  const env = 0.4 + 0.6 * Math.abs(Math.sin(i * 0.085 + 0.6));
+  return { h: Math.max(0.12, env * (0.3 + 0.7 * noise(i))), seg: hitIndex((i + 0.5) / BARS, 'audio') };
+});
+const cells = Array.from({ length: CELLS }, (_, i) => ({
+  seg: segments.findIndex((s) => s.frames && (i + 1) / CELLS > s.a && i / CELLS < s.b),
+}));
+
+type Box = { x: number; y: number; w: number; h: number };
+type Node = { id: string; box: Box; label: string; note: string };
+type Edge = { id: string; d: string; arrow?: boolean };
+type Layout = { id: 'wide' | 'tall'; vb: [number, number]; query: Box; cap: [number, number]; nodes: Node[]; edges: Edge[] };
+
+const n = (id: string, box: Box): Node => ({ id, box, label: stage[id].label, note: stage[id].note });
+
+// Desktop: left to right, the two analysers stacked in parallel.
+const wide: Layout = {
+  id: 'wide',
+  vb: [1136, 252],
+  query: { x: 1, y: 90, w: 270, h: 56 },
+  cap: [4, 174],
+  nodes: [
+    n('api', { x: 320, y: 90, w: 100, h: 56 }),
+    n('audio', { x: 480, y: 30, w: 190, h: 56 }),
+    n('frames', { x: 480, y: 146, w: 190, h: 56 }),
+    n('match', { x: 730, y: 90, w: 180, h: 56 }),
+    n('result', { x: 960, y: 90, w: 170, h: 56 }),
+  ],
+  edges: [
+    { id: 'qa', d: 'M271 118 H320', arrow: true },
+    { id: 'aa', d: 'M420 118 H442 Q450 118 450 110 V66 Q450 58 458 58 H480', arrow: true },
+    { id: 'af', d: 'M420 118 H442 Q450 118 450 126 V166 Q450 174 458 174 H480', arrow: true },
+    { id: 'am', d: 'M670 58 H692 Q700 58 700 66 V110 Q700 118 708 118 H730' },
+    { id: 'fm', d: 'M670 174 H692 Q700 174 700 166 V126 Q700 118 708 118 H730', arrow: true },
+    { id: 'mr', d: 'M910 118 H960', arrow: true },
+    { id: 'drop', d: 'M1112 146 V250', arrow: true },
+  ],
+};
+
+// Narrow: top to bottom, the two analysers side by side.
+const tall: Layout = {
+  id: 'tall',
+  vb: [340, 502],
+  query: { x: 1, y: 1, w: 338, h: 52 },
+  cap: [4, 80],
+  nodes: [
+    n('api', { x: 60, y: 112, w: 220, h: 48 }),
+    n('audio', { x: 1, y: 204, w: 162, h: 64 }),
+    n('frames', { x: 177, y: 204, w: 162, h: 64 }),
+    n('match', { x: 60, y: 312, w: 220, h: 48 }),
+    n('result', { x: 20, y: 404, w: 300, h: 48 }),
+  ],
+  edges: [
+    { id: 'qa', d: 'M170 53 V112', arrow: true },
+    { id: 'aa', d: 'M170 160 V174 Q170 182 162 182 H90 Q82 182 82 190 V204', arrow: true },
+    { id: 'af', d: 'M170 160 V174 Q170 182 178 182 H250 Q258 182 258 190 V204', arrow: true },
+    { id: 'am', d: 'M82 268 V282 Q82 290 90 290 H162 Q170 290 170 298 V312' },
+    { id: 'fm', d: 'M258 268 V282 Q258 290 250 290 H178 Q170 290 170 298 V312', arrow: true },
+    { id: 'mr', d: 'M170 360 V404', arrow: true },
+    { id: 'drop', d: 'M170 452 V500', arrow: true },
+  ],
+};
+
+const layouts = [wide, tall];
+
+const figureLabel = `Diagram of the search pipeline. A text query typed in ${stage.query.note} goes to the ${stage.api.note} API. Two steps run in parallel: speech to text with ${stage.audio.note}, and object detection on the video frames. ${stage.match.note} matches their output against the query and returns timestamps. Below, a video timeline with a frame track and an audio waveform shows three matching segments in lime, marked ${segments
+  .map((s) => s.label)
+  .join(', ')}, and the playhead resting on the first one. The query and the timestamps are examples.`;
+---
+
+<section id="project-video" data-theme="violet" class="section-pad video">
+  <div class="wrap grid">
+    <header class="name-block">
+      <h3 class="name" data-name>{p.name}</h3>
+      <p class="meta">
+        <span>{p.year}</span>
+        <span>{p.kind}</span>
+      </p>
+    </header>
+
+    <p class="summary">{p.summary}</p>
+
+    <dl class="spec">
+      <div class="row">
+        <dt>It searches by</dt>
+        <dd>
+          <ul class="features">
+            {p.features.map((f) => <li>{f}</li>)}
+          </ul>
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Built with</dt>
+        <dd>{p.stack.join(', ')}</dd>
+      </div>
+    </dl>
+
+    <figure class="flow" data-flow role="img" aria-label={figureLabel}>
+      <div class="pipe">
+        {
+          layouts.map((L) => (
+            <svg class:list={['dia', `dia-${L.id}`]} viewBox={`0 0 ${L.vb[0]} ${L.vb[1]}`} aria-hidden="true" focusable="false">
+              <defs>
+                <marker id={`video-arrow-${L.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path class="arrowhead" d="M1 1 L9 5 L1 9" />
+                </marker>
+              </defs>
+
+              {L.edges.map((e) => (
+                <path class="edge" d={e.d} marker-end={e.arrow ? `url(#video-arrow-${L.id})` : undefined} />
+              ))}
+              {L.edges.map((e) => (
+                <path class="pulse" data-edge={e.id} d={e.d} />
+              ))}
+
+              {/* the search field */}
+              <g class="node field" data-node="query">
+                <rect class="shape" x={L.query.x} y={L.query.y} width={L.query.w} height={L.query.h} rx={L.query.h / 2} />
+                <circle class="glass" cx={L.query.x + 27} cy={L.query.y + L.query.h / 2 - 1} r="7" />
+                <path class="glass" d={`M${L.query.x + 32} ${L.query.y + L.query.h / 2 + 4} l5 5`} />
+                <text class="typed" data-typed x={L.query.x + 48} y={L.query.y + L.query.h / 2} dominant-baseline="central">{query}</text>
+                <rect class="caret" data-caret x={L.query.x + 48} y={L.query.y + L.query.h / 2 - 10} width="2" height="20" />
+              </g>
+              <text class="note" x={L.cap[0]} y={L.cap[1]}>
+                <tspan class="lbl">{stage.query.label}</tspan>
+                <tspan dx="8">{stage.query.note}</tspan>
+              </text>
+
+              {L.nodes.map((nd) => {
+                const b = nd.box;
+                const cy = b.y + b.h / 2;
+                const stacked = L.id === 'tall' && (nd.id === 'audio' || nd.id === 'frames');
+                return (
+                  <g class="node" data-node={nd.id}>
+                    <rect class="shape" x={b.x} y={b.y} width={b.w} height={b.h} rx="6" />
+                    <circle class="lamp-dot" cx={b.x + 18} cy={stacked ? b.y + 22 : cy} r="4" />
+                    <text class="lbl" x={b.x + 32} y={stacked ? b.y + 22 : cy} dominant-baseline="central">{nd.label}</text>
+                    {L.id === 'wide' ? (
+                      <text class="note" x={b.x + 2} y={b.y + b.h + 24}>{nd.note}</text>
+                    ) : stacked ? (
+                      <text class="note" x={b.x + 32} y={b.y + 45} dominant-baseline="central">{nd.note}</text>
+                    ) : (
+                      <text class="note" x={b.x + b.w - 16} y={cy} text-anchor="end" dominant-baseline="central">{nd.note}</text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          ))
+        }
+      </div>
+
+      <div class="timeline" data-timeline>
+        <div class="plot">
+          <div class="chips">
+            {
+              segments.map((s, i) => (
+                <span class="chip" data-seg={i} style={`left:${(s.a * 100).toFixed(2)}%`}>{s.label}</span>
+              ))
+            }
+          </div>
+
+          <div class="lane">
+            <span class="lane-lbl">Frames</span>
+            <div class="track frames">
+              {cells.map((c) => <i class:list={['cell', { hit: c.seg >= 0 }]} data-seg={c.seg >= 0 ? c.seg : undefined} />)}
+            </div>
+          </div>
+
+          <div class="lane">
+            <span class="lane-lbl">Audio</span>
+            <div class="track wave">
+              {
+                bars.map((b) => (
+                  <i class:list={['bar', { hit: b.seg >= 0 }]} data-seg={b.seg >= 0 ? b.seg : undefined} style={`height:${(b.h * 100).toFixed(1)}%`} />
+                ))
+              }
+            </div>
+          </div>
+
+          <div class="ruler">
+            {ruler.map((r) => <span>{r}</span>)}
+          </div>
+
+          <div class="playhead" data-playhead><i></i></div>
+        </div>
+      </div>
+
+      <p class="fine">The query and the timestamps here are examples.</p>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .video {
+    overflow: clip;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'name' 'sum' 'flow' 'spec';
+    row-gap: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+  }
+
+  .name-block {
+    grid-area: name;
+  }
+
+  .name {
+    font-size: clamp(2.5rem, 1.3rem + 5vw, 5rem);
+    font-weight: 800;
+    font-stretch: 118%;
+    letter-spacing: -0.025em;
+    max-width: 9ch;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+    margin-top: 1.1rem;
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meta span + span::before {
+    content: '';
+    display: inline-block;
+    width: 1.25rem;
+    height: 1px;
+    margin-right: 1.5rem;
+    vertical-align: middle;
+    background: var(--violet-300);
+  }
+
+  .summary {
+    grid-area: sum;
+    font-size: var(--text-xl);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    max-width: 20ch;
+  }
+
+  /* ---------- Spec ---------- */
+  .spec {
+    grid-area: spec;
+  }
+
+  .row {
+    display: grid;
+    gap: 0.4rem 1.5rem;
+    padding-block: 1rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  .row:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .row dt {
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+    padding-top: 0.15em;
+  }
+
+  .features li {
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .features li + li {
+    margin-top: 0.3rem;
+  }
+
+  /* ---------- Pipeline ---------- */
+  .flow {
+    grid-area: flow;
+    --edge: var(--violet-300);
+    --node: color-mix(in oklch, var(--indigo-900) 55%, var(--violet-600));
+    min-width: 0;
+  }
+
+  .dia {
+    width: 100%;
+    height: auto;
+    font-family: var(--font-sans);
+    overflow: visible;
+  }
+
+  .dia-wide {
+    display: none;
+  }
+
+  .dia-tall {
+    max-width: 24rem;
+    margin-inline: auto;
+  }
+
+  .dia text {
+    fill: var(--fg);
+    font-size: 15px;
+  }
+
+  .dia-wide text {
+    font-size: 16.5px;
+  }
+
+  .dia .lbl {
+    font-weight: 620;
+    fill: var(--fg);
+  }
+
+  .dia .note {
+    fill: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .dia-wide .note {
+    font-size: 15px;
+  }
+
+  .edge {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 1.5;
+  }
+
+  .arrowhead {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .pulse {
+    fill: none;
+    stroke: var(--signal);
+    stroke-width: 4;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+
+  .shape {
+    fill: var(--node);
+    stroke: var(--white);
+    stroke-width: 1.5;
+    transition: stroke var(--dur-2) var(--ease-out);
+  }
+
+  .field .shape {
+    fill: var(--white);
+    stroke: var(--white);
+  }
+
+  .glass {
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .dia .typed {
+    fill: var(--ink);
+    font-weight: 500;
+  }
+
+  .caret {
+    fill: var(--violet-600);
+    display: none;
+  }
+
+  .lamp-dot {
+    fill: var(--signal);
+    stroke: var(--signal);
+    stroke-width: 1.5;
+    transition:
+      fill var(--dur-2) var(--ease-out),
+      stroke var(--dur-2) var(--ease-out);
+  }
+
+  .is-live .caret {
+    display: inline;
+  }
+
+  .is-live .node:not(.is-on):not(.field) .shape {
+    stroke: var(--violet-400);
+  }
+
+  .is-live .node:not(.is-on) .lamp-dot {
+    fill: transparent;
+    stroke: var(--violet-300);
+  }
+
+  /* ---------- Timeline ---------- */
+  .timeline {
+    background: var(--indigo-950);
+    border-radius: var(--r-lg);
+    padding: clamp(1rem, 0.4rem + 2.6vw, 2.25rem);
+    padding-top: clamp(0.75rem, 0.4rem + 1.4vw, 1.5rem);
+  }
+
+  .plot {
+    position: relative;
+  }
+
+  .chips {
+    position: relative;
+    height: 2.5rem;
+  }
+
+  .chip {
+    position: absolute;
+    top: 0;
+    padding: 0.28em 0.6em;
+    border-radius: var(--r-sm) var(--r-sm) var(--r-sm) 0;
+    background: var(--signal);
+    color: var(--indigo-950);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    transform-origin: 0 100%;
+    transition:
+      opacity var(--dur-2) var(--ease-out),
+      transform var(--dur-2) var(--ease-out);
+  }
+
+  /* stem from the chip down to the tracks */
+  .chip::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 100%;
+    width: 1.5px;
+    height: 1rem;
+    background: var(--signal);
+  }
+
+  .lane + .lane {
+    margin-top: 0.75rem;
+  }
+
+  .lane-lbl {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: var(--text-xs);
+    color: var(--on-dark-muted);
+  }
+
+  .track {
+    display: flex;
+    gap: 1px;
+  }
+
+  .frames {
+    height: 1.75rem;
+    gap: 2px;
+  }
+
+  .cell {
+    flex: 1;
+    border-radius: 2px;
+    background: var(--indigo-800);
+    transition: background-color var(--dur-2) var(--ease-out);
+  }
+
+  .cell.hit {
+    background: var(--signal);
+  }
+
+  .wave {
+    height: 4rem;
+    align-items: center;
+  }
+
+  .bar {
+    flex: 1;
+    min-width: 1px;
+    border-radius: 1px;
+    background: var(--violet-500);
+    transition: background-color var(--dur-2) var(--ease-out);
+  }
+
+  .bar.hit {
+    background: var(--signal);
+  }
+
+  .ruler {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--line-dark);
+    font-size: var(--text-xs);
+    color: var(--on-dark-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .playhead {
+    position: absolute;
+    inset: 2rem 0 1.9rem;
+    pointer-events: none;
+    transform: translateX(7%);
+  }
+
+  .playhead i {
+    position: absolute;
+    left: -1px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--white);
+  }
+
+  .playhead i::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: -1px;
+    width: 10px;
+    height: 7px;
+    background: var(--white);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
+
+  .is-live .chip:not(.is-on) {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+
+  .is-live .cell.hit:not(.is-on) {
+    background: var(--indigo-800);
+  }
+
+  .is-live .bar.hit:not(.is-on) {
+    background: var(--violet-500);
+  }
+
+  .fine {
+    margin-top: 0.9rem;
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+  }
+
+  /* Tablet: pipeline and spec share a row, the timeline runs full width under both. */
+  @media (min-width: 680px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-areas: 'name sum' 'flow flow' 'spec spec';
+      column-gap: clamp(2rem, 4vw, 4rem);
+    }
+
+    .summary {
+      align-self: end;
+      padding-bottom: 0.2em;
+    }
+
+    .row {
+      grid-template-columns: 9rem minmax(0, 1fr);
+    }
+
+    .flow {
+      margin-top: clamp(0.5rem, 2vw, 1.5rem);
+    }
+
+    .wave {
+      height: 5.5rem;
+      gap: 2px;
+    }
+
+    .frames {
+      height: 2.25rem;
+      gap: 3px;
+    }
+
+    /* lane labels move into a left gutter */
+    .plot {
+      margin-left: 4.5rem;
+    }
+
+    .lane {
+      position: relative;
+    }
+
+    .lane-lbl {
+      position: absolute;
+      right: calc(100% + 1rem);
+      top: 50%;
+      margin: 0;
+      transform: translateY(-50%);
+    }
+
+    .playhead {
+      inset: 2rem 0 1.9rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .grid {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      grid-template-areas: 'name sum' 'name spec' 'flow flow';
+      grid-template-rows: auto auto auto;
+    }
+
+    .name-block {
+      align-self: end;
+    }
+
+    .summary {
+      align-self: start;
+      padding-bottom: 0;
+    }
+
+    .dia-wide {
+      display: block;
+    }
+
+    .dia-tall {
+      display: none;
+    }
+
+    .wave {
+      height: 7rem;
+      gap: 3px;
+    }
+
+    .bar {
+      border-radius: 2px;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, reduced, whenVisible, splitWords } from '../scripts/motion';
+
+  function init(root: HTMLElement) {
+    const flow = root.querySelector<HTMLElement>('[data-flow]');
+    const name = root.querySelector<HTMLElement>('[data-name]');
+    if (!flow || reduced) return;
+
+    if (name) {
+      const words = splitWords(name);
+      whenVisible(name, () => {
+        gsap.from(words, { yPercent: 105, duration: 1.1, stagger: 0.07 });
+      });
+    }
+    // The waveform grows out of its centre line, left to right.
+    const allBars = flow.querySelectorAll<HTMLElement>('.bar');
+    whenVisible(flow.querySelector('[data-timeline]'), () => {
+      gsap.from(allBars, { scaleY: 0, duration: 0.9, stagger: { each: 0.008, from: 'start' }, clearProps: 'transform' });
+    }, 'top 92%');
+
+    flow.classList.add('is-live');
+    const playhead = flow.querySelector<HTMLElement>('[data-playhead]');
+    const segs = Array.from(flow.querySelectorAll<HTMLElement>('.chip')).map((chip) => ({
+      at: parseFloat(chip.style.left) / 100,
+      els: Array.from(flow.querySelectorAll<HTMLElement>(`[data-seg="${chip.dataset.seg}"]`)),
+    }));
+    const mq = window.matchMedia('(min-width: 1024px)');
+    let tl: gsap.core.Timeline | null = null;
+    let inView = false;
+
+    const sync = () => {
+      if (!tl) return;
+      if (inView && !document.hidden) tl.play();
+      else tl.pause();
+    };
+
+    function build() {
+      tl?.kill();
+      const svg = flow!.querySelector<SVGSVGElement>(mq.matches ? '.dia-wide' : '.dia-tall');
+      if (!svg || !playhead) return;
+      const nodes = Array.from(svg.querySelectorAll<SVGGElement>('[data-node]'));
+      const pulses = Array.from(svg.querySelectorAll<SVGPathElement>('.pulse'));
+      const typed = svg.querySelector<SVGTextElement>('[data-typed]');
+      const caret = svg.querySelector<SVGRectElement>('[data-caret]');
+      const full = (typed?.dataset.full ?? typed?.textContent ?? '').trim();
+      if (typed) typed.dataset.full = full;
+      const x0 = Number(typed?.getAttribute('x') ?? 0);
+      const DASH = 14;
+      const state = { chars: 0 };
+
+      const type = () => {
+        if (!typed) return;
+        typed.textContent = full.slice(0, Math.round(state.chars));
+        caret?.setAttribute('x', String(x0 + typed.getComputedTextLength() + 3));
+      };
+      const reset = () => {
+        nodes.forEach((nd) => nd.classList.remove('is-on'));
+        segs.forEach((s) => s.els.forEach((el) => el.classList.remove('is-on')));
+        gsap.set(pulses, { opacity: 0 });
+        gsap.set(playhead, { xPercent: 0, x: 0, opacity: 0 });
+        state.chars = 0;
+        type();
+      };
+      reset();
+
+      const t = gsap.timeline({ repeat: -1, paused: true, onRepeat: reset });
+      tl = t;
+      const on = (id: string, at: number) => t.call(() => svg.querySelector(`[data-node="${id}"]`)?.classList.add('is-on'), [], at);
+      const send = (edge: string, at: number, dur: number, lights?: string) => {
+        const el = svg.querySelector<SVGPathElement>(`.pulse[data-edge="${edge}"]`);
+        if (!el) return;
+        const len = el.getTotalLength();
+        t.set(el, { strokeDasharray: `${DASH} ${len + DASH * 2}`, strokeDashoffset: DASH, opacity: 1 }, at);
+        t.to(el, { strokeDashoffset: -len, duration: dur, ease: 'power2.inOut' }, at);
+        t.set(el, { opacity: 0 }, at + dur);
+        if (lights) on(lights, at + dur - 0.08);
+      };
+
+      // 1. the sentence is typed
+      on('query', 0.3);
+      t.to(state, { chars: full.length, duration: 1.2, ease: 'none', onUpdate: type }, 0.4);
+      // 2. it moves through the pipeline; the two analysers run side by side
+      send('qa', 1.8, 0.5, 'api');
+      send('aa', 2.35, 0.7, 'audio');
+      send('af', 2.35, 0.7, 'frames');
+      send('am', 3.2, 0.7);
+      send('fm', 3.2, 0.7, 'match');
+      send('mr', 4.0, 0.5, 'result');
+      send('drop', 4.55, 0.5);
+      // 3. the playhead sweeps the video; matches light as it crosses them
+      const SWEEP = 3.2;
+      const start = 5.05;
+      t.set(playhead, { opacity: 1 }, start);
+      t.to(playhead, { xPercent: 100, duration: SWEEP, ease: 'none' }, start);
+      segs.forEach((s) => {
+        t.call(() => s.els.forEach((el) => el.classList.add('is-on')), [], start + s.at * SWEEP);
+      });
+      // 4. jump to the first moment and hold
+      t.to(playhead, { xPercent: (segs[0]?.at ?? 0) * 100, duration: 0.9, ease: 'power3.inOut' }, start + SWEEP + 0.35);
+      t.to({}, { duration: 3.2 });
+
+      sync();
+    }
+
+    build();
+    mq.addEventListener('change', build);
+
+    new IntersectionObserver(
+      (entries) => {
+        inView = entries[entries.length - 1].isIntersecting;
+        sync();
+      },
+      { threshold: 0.15 },
+    ).observe(flow);
+    document.addEventListener('visibilitychange', sync);
+  }
+
+  const root = document.querySelector<HTMLElement>('#project-video');
+  if (root) init(root);
+</script>

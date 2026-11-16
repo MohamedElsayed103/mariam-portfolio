@@ -1,0 +1,775 @@
+---
+import { projects } from '../data/cv';
+
+const p = projects.telephony;
+const gateLabels = p.stack.filter((s) => s === 'Spring Cloud' || s === 'Spring Security');
+const stores = p.stack.filter((s) => !s.startsWith('Spring'));
+const integrations = p.integrations;
+const imei = '35••••••••••••1'; // illustrative, masked
+
+type Box = { x: number; y: number; w: number; h: number };
+type Edge = { id: string; d: string; arrow?: boolean };
+type Layout = {
+  id: 'wide' | 'tall';
+  vb: [number, number];
+  phone: Box;
+  platform: Box;
+  gate: Box;
+  svc: Box;
+  sheets: Box[];
+  integ: Box[];
+  stores: Box[];
+  capInteg: [number, number];
+  capStores: [number, number];
+  edges: Edge[];
+};
+
+const NODE_H = 44;
+
+// Desktop: left to right. Phone, platform, then a vertical bus to integrations and stores.
+function wide(): Layout {
+  const cy0 = 260;
+  const svc = { x: 452, y: cy0 - 34, w: 130, h: 68 };
+  const nx = 664;
+  const nw = 176;
+  const bus = 632;
+  const integ = integrations.map((_, i) => ({ x: nx, y: 44 + i * 56, w: nw, h: NODE_H }));
+  const st = stores.map((_, i) => ({ x: nx, y: 278 + i * 56, w: nw, h: NODE_H }));
+  const fan = (b: Box) => {
+    const cy = b.y + b.h / 2;
+    const up = cy < cy0;
+    return `M582 ${cy0} H${bus - 8} Q${bus} ${cy0} ${bus} ${up ? cy0 - 8 : cy0 + 8} V${up ? cy + 8 : cy - 8} Q${bus} ${cy} ${bus + 8} ${cy} H${nx}`;
+  };
+  return {
+    id: 'wide',
+    vb: [852, 500],
+    phone: { x: 12, y: cy0 - 150, w: 176, h: 300 },
+    platform: { x: 250, y: cy0 - 136, w: 350, h: 272 },
+    gate: { x: 268, y: cy0 - 38, w: 150, h: 76 },
+    svc,
+    sheets: [14, 7].map((o) => ({ x: svc.x + o, y: svc.y - o, w: svc.w, h: svc.h })),
+    integ,
+    stores: st,
+    capInteg: [nx, 28],
+    capStores: [nx, 262],
+    edges: [
+      { id: 'req', d: `M188 ${cy0 - 18} H268`, arrow: true },
+      { id: 'res', d: `M268 ${cy0 + 18} H188`, arrow: true },
+      { id: 'gs', d: `M418 ${cy0} H452` },
+      ...integ.map((b, i) => ({ id: `i${i}`, d: fan(b) })),
+      ...st.map((b, i) => ({ id: `s${i}`, d: fan(b) })),
+    ],
+  };
+}
+
+// Narrow: top to bottom. The bus runs down the middle, integrations left, stores right.
+function tall(): Layout {
+  const svc = { x: 80, y: 284, w: 180, h: 52 };
+  const bus = 170;
+  const y0 = 404;
+  const integ = integrations.map((_, i) => ({ x: 8, y: y0 + i * 56, w: 150, h: NODE_H }));
+  const st = stores.map((_, i) => ({ x: 182, y: y0 + i * 56, w: 150, h: NODE_H }));
+  const fan = (b: Box, left: boolean) => {
+    const cy = b.y + b.h / 2;
+    return `M${bus} 336 V${cy - 8} Q${bus} ${cy} ${left ? bus - 8 : bus + 8} ${cy} H${left ? 158 : 182}`;
+  };
+  return {
+    id: 'tall',
+    vb: [340, y0 + stores.length * 56],
+    phone: { x: 70, y: 2, w: 200, h: 122 },
+    platform: { x: 8, y: 158, w: 324, h: 196 },
+    gate: { x: 60, y: 176, w: 220, h: 64 },
+    svc,
+    sheets: [14, 7].map((o) => ({ x: svc.x + o, y: svc.y - o, w: svc.w, h: svc.h })),
+    integ,
+    stores: st,
+    capInteg: [8, 388],
+    capStores: [182, 388],
+    edges: [
+      { id: 'req', d: 'M150 124 V176', arrow: true },
+      { id: 'res', d: 'M190 176 V124', arrow: true },
+      { id: 'gs', d: 'M170 240 V284' },
+      ...integ.map((b, i) => ({ id: `i${i}`, d: fan(b, true) })),
+      ...st.map((b, i) => ({ id: `s${i}`, d: fan(b, false) })),
+    ],
+  };
+}
+
+const layouts = [wide(), tall()];
+
+const octagon = (b: Box, c = 9) =>
+  [
+    [b.x + c, b.y],
+    [b.x + b.w - c, b.y],
+    [b.x + b.w, b.y + c],
+    [b.x + b.w, b.y + b.h - c],
+    [b.x + b.w - c, b.y + b.h],
+    [b.x + c, b.y + b.h],
+    [b.x, b.y + b.h - c],
+    [b.x, b.y + c],
+  ]
+    .map((pt) => pt.join(','))
+    .join(' ');
+
+const steps = [
+  { id: 'in', label: 'Request in' },
+  { id: 'integ', label: 'Integrations called' },
+  { id: 'store', label: 'Data stored' },
+  { id: 'out', label: 'Response back' },
+];
+
+const diagramLabel = `Diagram of one registration request. A phone with a masked IMEI sends a request into the platform. It passes ${gateLabels.join(
+  ' and ',
+)} and reaches the Spring Boot services, which call three integrations (${integrations.join(', ')}) and four data stores (${stores.join(
+  ', ',
+)}). The response then travels back to the phone and its lamp turns lime.`;
+---
+
+<section id="project-telephony" data-theme="dark" class="section-pad tele">
+  <div class="grid">
+    <header class="head">
+      <h3 class="name" data-name>{p.name}</h3>
+      <p class="meta">
+        <span>{p.year}</span>
+        <span>{p.kind}</span>
+      </p>
+      <p class="summary">{p.summary}</p>
+    </header>
+
+    <figure class="board" data-board role="img" aria-label={diagramLabel}>
+      {
+        layouts.map((L) => (
+          <svg
+            class:list={['dia', `dia-${L.id}`]}
+            data-layout={L.id}
+            viewBox={`0 0 ${L.vb[0]} ${L.vb[1]}`}
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <marker id={`tele-arrow-${L.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path class="arrowhead" d="M1 1 L9 5 L1 9" />
+              </marker>
+            </defs>
+
+            {/* platform boundary */}
+            <rect class="platform" x={L.platform.x} y={L.platform.y} width={L.platform.w} height={L.platform.h} rx="12" />
+            <rect class="knock" x={L.platform.x + 14} y={L.platform.y - 10} width="86" height="20" />
+            <text class="cap" x={L.platform.x + 22} y={L.platform.y} dominant-baseline="central">Platform</text>
+
+            {/* edges */}
+            {L.edges.map((e) => (
+              <path class="edge" d={e.d} marker-end={e.arrow ? `url(#tele-arrow-${L.id})` : undefined} />
+            ))}
+            {L.edges.map((e) => (
+              <path class="pulse" data-edge={e.id} d={e.d} />
+            ))}
+
+            {/* phone */}
+            <g class="node phone" data-node="phone">
+              <rect class="shape" x={L.phone.x} y={L.phone.y} width={L.phone.w} height={L.phone.h} rx={L.id === 'wide' ? 22 : 16} />
+              {L.id === 'wide' ? (
+                <>
+                  <path class="slit" d={`M${L.phone.x + 70} ${L.phone.y + 20} h36`} />
+                  <text class="cap" x={L.phone.x + 16} y={L.phone.y + 84}>IMEI</text>
+                  <text class="mono" x={L.phone.x + 16} y={L.phone.y + 112}>{imei}</text>
+                  <path class="rule" d={`M${L.phone.x + 16} ${L.phone.y + 150} h${L.phone.w - 32}`} />
+                  <circle class="lamp-dot" cx={L.phone.x + 22} cy={L.phone.y + 190} r="6" />
+                  <text class="lbl st-on" x={L.phone.x + 38} y={L.phone.y + 190} dominant-baseline="central">Registered</text>
+                  <text class="lbl st-off" x={L.phone.x + 38} y={L.phone.y + 190} dominant-baseline="central">Waiting</text>
+                  <path class="slit" d={`M${L.phone.x + 62} ${L.phone.y + L.phone.h - 16} h52`} />
+                </>
+              ) : (
+                <>
+                  <text class="cap" x={L.phone.x + 16} y={L.phone.y + 30}>IMEI</text>
+                  <text class="mono" x={L.phone.x + 16} y={L.phone.y + 56}>{imei}</text>
+                  <path class="rule" d={`M${L.phone.x + 16} ${L.phone.y + 74} h${L.phone.w - 32}`} />
+                  <circle class="lamp-dot" cx={L.phone.x + 22} cy={L.phone.y + 98} r="5.5" />
+                  <text class="lbl st-on" x={L.phone.x + 36} y={L.phone.y + 98} dominant-baseline="central">Registered</text>
+                  <text class="lbl st-off" x={L.phone.x + 36} y={L.phone.y + 98} dominant-baseline="central">Waiting</text>
+                </>
+              )}
+            </g>
+
+            {/* gate */}
+            <g class="node" data-node="gate">
+              <rect class="shape" x={L.gate.x} y={L.gate.y} width={L.gate.w} height={L.gate.h} rx="6" />
+              {gateLabels.map((g, i) => (
+                <text
+                  class="lbl"
+                  x={L.gate.x + L.gate.w / 2}
+                  y={L.gate.y + L.gate.h / 2 + (i - (gateLabels.length - 1) / 2) * 22}
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                >
+                  {g}
+                </text>
+              ))}
+            </g>
+
+            {/* services */}
+            <g class="node" data-node="svc">
+              {L.sheets.map((s) => (
+                <rect class="shape sheet" x={s.x} y={s.y} width={s.w} height={s.h} rx="5" />
+              ))}
+              <rect class="shape" x={L.svc.x} y={L.svc.y} width={L.svc.w} height={L.svc.h} rx="6" />
+              {L.id === 'wide' ? (
+                <>
+                  <text class="lbl" x={L.svc.x + L.svc.w / 2} y={L.svc.y + L.svc.h / 2 - 11} text-anchor="middle" dominant-baseline="central">Spring Boot</text>
+                  <text class="lbl" x={L.svc.x + L.svc.w / 2} y={L.svc.y + L.svc.h / 2 + 11} text-anchor="middle" dominant-baseline="central">services</text>
+                </>
+              ) : (
+                <text class="lbl" x={L.svc.x + L.svc.w / 2} y={L.svc.y + L.svc.h / 2} text-anchor="middle" dominant-baseline="central">Spring Boot services</text>
+              )}
+            </g>
+
+            {/* integrations */}
+            <text class="cap" x={L.capInteg[0]} y={L.capInteg[1]}>Integrations</text>
+            {L.integ.map((b, i) => (
+              <g class="node" data-node={`i${i}`}>
+                <polygon class="shape" points={octagon(b)} />
+                <circle class="lamp-dot" cx={b.x + 18} cy={b.y + b.h / 2} r="4" />
+                <text class="lbl" x={b.x + 32} y={b.y + b.h / 2} dominant-baseline="central">{integrations[i]}</text>
+              </g>
+            ))}
+
+            {/* data stores */}
+            <text class="cap" x={L.capStores[0]} y={L.capStores[1]}>Data stores</text>
+            {L.stores.map((b, i) => (
+              <g class="node store" data-node={`s${i}`}>
+                <rect class="fill" x={b.x} y={b.y} width={b.w} height={b.h} />
+                <path class="shape" d={`M${b.x} ${b.y} h${b.w} M${b.x} ${b.y + b.h} h${b.w}`} />
+                <circle class="lamp-dot" cx={b.x + 18} cy={b.y + b.h / 2} r="4" />
+                <text class="lbl" x={b.x + 32} y={b.y + b.h / 2} dominant-baseline="central">{stores[i]}</text>
+              </g>
+            ))}
+          </svg>
+        ))
+      }
+
+      <ol class="steps">
+        {
+          steps.map((s) => (
+            <li class="step" data-step={s.id}>
+              <span class="step-lamp" />
+              {s.label}
+            </li>
+          ))
+        }
+      </ol>
+    </figure>
+
+    <div class="spec">
+      <dl class="rows">
+        <div class="row" data-row>
+          <dt>What it does</dt>
+          <dd>
+            <ul class="features">
+              {p.features.map((f) => <li>{f}</li>)}
+            </ul>
+          </dd>
+        </div>
+        <div class="row" data-row>
+          <dt>Integrates with</dt>
+          <dd>{integrations.join(', ')}</dd>
+        </div>
+        <div class="row" data-row>
+          <dt>Built with</dt>
+          <dd>{p.stack.join(', ')}</dd>
+        </div>
+      </dl>
+
+      <a class="btn btn-signal link" href={p.link.href} target="_blank" rel="noopener">
+        {p.link.label}
+        <svg class="out" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+          <path d="M5 11 L11 5 M6 5 h5 v5" />
+        </svg>
+        <span class="sr-only">(opens in a new tab)</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .tele {
+    overflow: clip;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-areas: 'head' 'board' 'spec';
+    gap: clamp(2rem, 1rem + 3vw, 3.5rem);
+    width: min(100% - 2 * var(--gutter), var(--wrap));
+    margin-inline: auto;
+  }
+
+  .head {
+    grid-area: head;
+  }
+
+  .name {
+    font-size: clamp(2.75rem, 1.4rem + 5vw, 4.75rem);
+    font-weight: 800;
+    font-stretch: 120%;
+    letter-spacing: -0.025em;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+    margin-top: 1.1rem;
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meta span + span::before {
+    content: '';
+    display: inline-block;
+    width: 1.25rem;
+    height: 1px;
+    margin-right: 1.5rem;
+    vertical-align: middle;
+    background: var(--rule);
+  }
+
+  .summary {
+    margin-top: clamp(1.25rem, 1rem + 1vw, 2rem);
+    font-size: var(--text-lg);
+    line-height: 1.4;
+    max-width: 30ch;
+  }
+
+  /* ---------- Spec sheet ---------- */
+  .spec {
+    grid-area: spec;
+  }
+
+  .row {
+    display: grid;
+    gap: 0.5rem 1.5rem;
+    padding-block: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  .row:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .row dt {
+    font-size: var(--text-sm);
+    color: var(--fg-muted);
+    padding-top: 0.2em;
+  }
+
+  .row dd {
+    max-width: 44ch;
+  }
+
+  .features li {
+    position: relative;
+    padding-left: 1.4rem;
+    font-size: var(--text-lg);
+    font-weight: 560;
+    line-height: 1.3;
+  }
+
+  .features li + li {
+    margin-top: 0.55rem;
+  }
+
+  .features li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--signal);
+  }
+
+  .link {
+    margin-top: clamp(1.75rem, 1.25rem + 1.5vw, 2.5rem);
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .out {
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  .link:hover .out {
+    transform: translate(2px, -2px);
+  }
+
+  /* ---------- Board ---------- */
+  .board {
+    grid-area: board;
+    --edge: color-mix(in oklch, var(--violet-400) 62%, var(--indigo-900));
+    --node: var(--indigo-800);
+    background: var(--indigo-900);
+    border-radius: var(--r-lg);
+    padding: clamp(0.75rem, 0.2rem + 2.6vw, 2.25rem);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .dia {
+    margin-block: auto;
+    width: 100%;
+    height: auto;
+    font-family: var(--font-sans);
+    overflow: visible;
+  }
+
+  .dia-wide {
+    display: none;
+    max-width: 58rem;
+  }
+
+  .dia-tall {
+    max-width: 26rem;
+    margin-inline: auto;
+  }
+
+  .dia text {
+    fill: var(--fg);
+    font-size: 16px;
+    font-stretch: 100%;
+  }
+
+  .dia-tall text {
+    font-size: 15px;
+  }
+
+  .dia .lbl {
+    font-weight: 600;
+  }
+
+  .dia .cap {
+    fill: var(--fg-muted);
+    font-weight: 450;
+  }
+
+  .dia .mono {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-variant-ligatures: none;
+    letter-spacing: 0;
+  }
+
+  .dia-wide .mono {
+    font-size: 15.5px;
+  }
+
+  .platform {
+    fill: color-mix(in oklch, var(--indigo-950) 55%, var(--indigo-900));
+    stroke: var(--edge);
+    stroke-width: 1.25;
+    stroke-dasharray: 3 6;
+    stroke-linecap: round;
+  }
+
+  .knock {
+    fill: var(--indigo-900);
+  }
+
+  .edge {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 1.5;
+  }
+
+  .arrowhead {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* Packets: hidden unless the loop is running. */
+  .pulse {
+    fill: none;
+    stroke: var(--signal);
+    stroke-width: 4;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+
+  .shape {
+    fill: var(--node);
+    stroke: var(--violet-200);
+    stroke-width: 1.5;
+    transition: stroke var(--dur-2) var(--ease-out);
+  }
+
+  .phone .shape {
+    fill: var(--indigo-950);
+    stroke-width: 2;
+  }
+
+  .sheet {
+    fill: var(--indigo-900);
+  }
+
+  .store .fill {
+    fill: var(--node);
+  }
+
+  .store .shape {
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .slit,
+  .rule {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  .slit {
+    stroke-width: 3;
+  }
+
+  .lamp-dot {
+    fill: var(--signal);
+    stroke: var(--signal);
+    stroke-width: 1.5;
+    transition:
+      fill var(--dur-2) var(--ease-out),
+      stroke var(--dur-2) var(--ease-out);
+  }
+
+  .st-off {
+    display: none;
+  }
+
+  /* Live (JS running): nodes start idle and light as the request reaches them. */
+  .is-live .node:not(.is-on) .shape {
+    stroke: var(--edge);
+  }
+
+  .is-live .node:not(.is-on) .lamp-dot {
+    fill: transparent;
+    stroke: var(--edge);
+  }
+
+  .is-live .phone:not(.is-on) .st-on {
+    display: none;
+  }
+
+  .is-live .phone:not(.is-on) .st-off {
+    display: inline;
+    fill: var(--fg-muted);
+  }
+
+  /* ---------- Steps ---------- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 1rem;
+    margin-top: clamp(1rem, 0.5rem + 1.5vw, 1.75rem);
+    padding-top: clamp(0.9rem, 0.5rem + 1vw, 1.25rem);
+    border-top: 1px solid var(--rule);
+    font-size: var(--text-sm);
+    line-height: 1.25;
+  }
+
+  .step {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    transition: color var(--dur-2) var(--ease-out);
+  }
+
+  .step-lamp {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow: inset 0 0 0 1.5px var(--signal);
+    transition:
+      background-color var(--dur-2) var(--ease-out),
+      box-shadow var(--dur-2) var(--ease-out);
+  }
+
+  .is-live .step:not(.is-on) {
+    color: var(--fg-muted);
+  }
+
+  .is-live .step:not(.is-on) .step-lamp {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--edge);
+  }
+
+  @media (min-width: 760px) {
+    .row {
+      grid-template-columns: 8.5rem minmax(0, 1fr);
+    }
+
+    .dia-wide {
+      display: block;
+    }
+
+    .dia-tall {
+      display: none;
+    }
+
+    .steps {
+      grid-template-columns: repeat(4, auto);
+      justify-content: space-between;
+      max-width: 58rem;
+    }
+  }
+
+  /* Side by side: text left, the board bleeds off the right edge. */
+  @media (min-width: 1280px) {
+    .grid {
+      width: auto;
+      margin-inline: 0;
+      padding-inline-start: max(var(--gutter), calc((100% - var(--wrap)) / 2));
+      grid-template-columns: minmax(0, 0.6fr) minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      grid-template-areas: 'head board' 'spec board';
+      column-gap: clamp(2.5rem, 4vw, 4.5rem);
+      row-gap: clamp(2rem, 3vw, 3rem);
+    }
+
+    .board {
+      border-radius: var(--r-lg) 0 0 var(--r-lg);
+      padding-right: max(var(--gutter), 2.25rem);
+    }
+
+    .spec {
+      align-self: end;
+    }
+  }
+</style>
+
+<script>
+  import { gsap, reduced, EASE, whenVisible, splitWords } from '../scripts/motion';
+
+  function init(root: HTMLElement) {
+    const board = root.querySelector<HTMLElement>('[data-board]');
+    const name = root.querySelector<HTMLElement>('[data-name]');
+    if (!board || reduced) return;
+
+    // Entrances: the name rises out of its line, the board opens from the edge it bleeds to,
+    // the spec rows rule themselves in.
+    if (name) {
+      const words = splitWords(name);
+      whenVisible(name, () => {
+        gsap.from(words, { yPercent: 105, duration: 1.1, stagger: 0.06 });
+      });
+    }
+    whenVisible(board, () => {
+      gsap.from(board, { clipPath: 'inset(0 0 0 100%)', duration: 1.3, ease: EASE.out, clearProps: 'clipPath' });
+    });
+    const rows = root.querySelectorAll<HTMLElement>('[data-row]');
+    whenVisible(root.querySelector('.spec'), () => {
+      gsap.from(rows, { opacity: 0, y: 14, duration: 0.8, stagger: 0.09 });
+    }, 'top 90%');
+
+    // The request loop.
+    board.classList.add('is-live');
+    const steps = Array.from(board.querySelectorAll<HTMLElement>('[data-step]'));
+    const mq = window.matchMedia('(min-width: 760px)');
+    let tl: gsap.core.Timeline | null = null;
+    let inView = false;
+
+    const sync = () => {
+      if (!tl) return;
+      if (inView && !document.hidden) tl.play();
+      else tl.pause();
+    };
+
+    function build() {
+      tl?.kill();
+      const svg = board!.querySelector<SVGSVGElement>(mq.matches ? '.dia-wide' : '.dia-tall');
+      if (!svg) return;
+      const nodes = Array.from(svg.querySelectorAll<SVGGElement>('[data-node]'));
+      const pulses = Array.from(svg.querySelectorAll<SVGPathElement>('.pulse'));
+      const node = (id: string) => svg.querySelector(`[data-node="${id}"]`);
+      const step = (id: string) => steps.find((s) => s.dataset.step === id);
+      const DASH = 14;
+
+      const reset = () => {
+        nodes.forEach((n) => n.classList.remove('is-on'));
+        steps.forEach((s) => s.classList.remove('is-on'));
+        gsap.set(pulses, { opacity: 0 });
+      };
+      reset();
+
+      const t = gsap.timeline({ repeat: -1, paused: true, onRepeat: reset });
+      tl = t;
+
+      /** Send one packet along an edge, then light whatever it reached. */
+      const send = (edge: string, at: number, dur: number, opts: { back?: boolean; lights?: string } = {}) => {
+        const el = svg.querySelector<SVGPathElement>(`.pulse[data-edge="${edge}"]`);
+        if (!el) return;
+        const len = el.getTotalLength();
+        const from = opts.back ? -len : DASH;
+        const to = opts.back ? DASH : -len;
+        t.set(el, { strokeDasharray: `${DASH} ${len + DASH * 2}`, strokeDashoffset: from, opacity: 1 }, at);
+        t.to(el, { strokeDashoffset: to, duration: dur, ease: 'power2.inOut' }, at);
+        t.set(el, { opacity: 0 }, at + dur);
+        if (opts.lights) t.call(() => node(opts.lights!)?.classList.add('is-on'), [], at + dur - 0.08);
+      };
+      const light = (id: string, at: number) => t.call(() => step(id)?.classList.add('is-on'), [], at);
+
+      // 1. in
+      light('in', 0.5);
+      send('req', 0.5, 0.7, { lights: 'gate' });
+      send('gs', 1.2, 0.45, { lights: 'svc' });
+      // 2. integrations, out and back
+      light('integ', 1.8);
+      const integ = svg.querySelectorAll('[data-node^="i"]').length;
+      for (let i = 0; i < integ; i++) {
+        send(`i${i}`, 1.8 + i * 0.14, 0.9, { lights: `i${i}` });
+        send(`i${i}`, 2.85 + i * 0.14, 0.8, { back: true });
+      }
+      // 3. persist
+      light('store', 4.1);
+      const st = svg.querySelectorAll('[data-node^="s"]:not([data-node="svc"])').length;
+      for (let i = 0; i < st; i++) send(`s${i}`, 4.1 + i * 0.12, 0.9, { lights: `s${i}` });
+      // 4. response
+      light('out', 5.5);
+      send('gs', 5.5, 0.45, { back: true });
+      send('res', 5.95, 0.7, { lights: 'phone' });
+      // hold on the finished frame
+      t.to({}, { duration: 3 }, 6.65);
+
+      sync();
+    }
+
+    build();
+    mq.addEventListener('change', build);
+
+    new IntersectionObserver(
+      (entries) => {
+        inView = entries.some((e) => e.isIntersecting);
+        sync();
+      },
+      { threshold: 0.15 },
+    ).observe(board);
+    document.addEventListener('visibilitychange', sync);
+  }
+
+  const root = document.querySelector<HTMLElement>('#project-telephony');
+  if (root) init(root);
+</script>
